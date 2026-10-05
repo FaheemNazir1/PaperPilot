@@ -1,68 +1,58 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  FileText,
-  BookOpen,
-  Lightbulb,
-  Sparkles,
-  Plus,
-  ArrowRight
-} from 'lucide-react';
+import { BookOpen, Plus, Sparkles, CheckCircle2 } from 'lucide-react';
 import { Button } from '../components/common/Button';
-import { StatCard } from '../components/dashboard/StatCard';
-import { RecentPaperCard } from '../components/dashboard/RecentPaperCard';
-import { RecentReviewsSection } from '../components/dashboard/RecentReviewsSection';
-import { AIInsightsPanel } from '../components/dashboard/AIInsightsPanel';
-import { WorkflowBanner } from '../components/common/WorkflowBanner';
-import { PaperSummaryModal } from '../components/papers/PaperSummaryModal';
+import { WorkflowSteps } from '../components/dashboard/WorkflowSteps';
+import { HeroUploadArea } from '../components/dashboard/HeroUploadArea';
+import { CompactPaperList } from '../components/dashboard/CompactPaperList';
+import { ContinueReviewCard } from '../components/dashboard/ContinueReviewCard';
+import { QuickActionsBar } from '../components/dashboard/QuickActionsBar';
 import { PaperDetailsModal } from '../components/papers/PaperDetailsModal';
+import { PaperSummaryModal } from '../components/papers/PaperSummaryModal';
 import { api } from '../lib/api';
 import { Paper, LiteratureReview } from '../types';
-import { AIInsightItem, DashboardStats } from '../data/mockStats';
 
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
   const [papers, setPapers] = useState<Paper[]>([]);
   const [reviews, setReviews] = useState<LiteratureReview[]>([]);
-  const [insights, setInsights] = useState<AIInsightItem[]>([]);
+  const [selectedPaper, setSelectedPaper] = useState<Paper | null>(null);
   const [summaryPaper, setSummaryPaper] = useState<Paper | null>(null);
-  const [detailsPaper, setDetailsPaper] = useState<Paper | null>(null);
 
   useEffect(() => {
-    async function loadDashboardData() {
-      const [statsData, papersData, reviewsData, insightsData] = await Promise.all([
-        api.getDashboardStats(),
+    async function loadData() {
+      const [papersData, reviewsData] = await Promise.all([
         api.getPapers(),
         api.getReviews(),
-        api.getAIInsights()
       ]);
-      setStats(statsData);
       setPapers(papersData);
       setReviews(reviewsData);
-      setInsights(insightsData);
     }
-    loadDashboardData();
+    loadData();
   }, []);
 
+  const latestReview = reviews.length > 0 ? reviews[0] : null;
+
   return (
-    <div className="space-y-8 animate-in fade-in duration-200">
-      {/* Dashboard Welcome Header & Hero CTAs */}
+    <div className="space-y-7 max-w-6xl mx-auto animate-in fade-in duration-200">
+      {/* 1. Header Section */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-6 border-b border-zinc-800/80">
-        <div>
-          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-zinc-900 border border-zinc-800 text-[11px] font-mono text-zinc-400 mb-2">
+        <div className="space-y-1.5 max-w-2xl">
+          <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-zinc-900 border border-zinc-800 text-[11px] font-mono text-zinc-400">
             <span className="w-1.5 h-1.5 rounded-full bg-accent-400 inline-block" />
-            <span>AI-Powered Scientific Literature Review Assistant</span>
+            <span>PaperPilot · AI Copilot for Scientific Literature Reviews</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-            Good morning, Researcher.
+
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-100">
+            Turn research papers into literature reviews.
           </h1>
-          <p className="text-sm text-zinc-400 mt-1 max-w-2xl font-sans">
-            Turn research papers into insights, comparisons and literature reviews.
+
+          <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed font-sans">
+            Upload multiple scientific papers and let PaperPilot extract, compare, synthesize, and organize the research for you.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 shrink-0">
           <Button
             variant="outline"
             size="md"
@@ -78,106 +68,75 @@ export const DashboardPage: React.FC = () => {
             leftIcon={<Plus className="w-4 h-4" />}
             onClick={() => navigate('/upload')}
           >
-            + Upload Papers
+            + Upload Research Papers
           </Button>
         </div>
       </div>
 
-      {/* Workflow Journey Pipeline */}
-      <WorkflowBanner />
+      {/* 2. Core Workflow Step Indicator */}
+      <WorkflowSteps />
 
-      {/* Statistics Section with Exact Mock Values */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          label="Papers Analyzed"
-          value={stats?.papersAnalyzed || 12}
-          sublabel="Across 4 scientific disciplines"
-          icon={FileText}
-          trend="+3 this week"
-        />
-        <StatCard
-          label="Literature Reviews"
-          value={stats?.literatureReviews || 8}
-          sublabel="IEEE, Nature & ACM styles"
-          icon={BookOpen}
-          trend="2 completed"
-        />
-        <StatCard
-          label="Key Insights"
-          value={stats?.keyInsights || 47}
-          sublabel="Synthesized cross-paper claims"
-          icon={Sparkles}
-          trend="High confidence"
-        />
-        <StatCard
-          label="Research Gaps"
-          value={stats?.researchGaps || 23}
-          sublabel="Identified methodology bottlenecks"
-          icon={Lightbulb}
-          trend="4 high priority"
-        />
-      </div>
+      {/* 3. Hero / Primary Upload Action */}
+      <HeroUploadArea />
 
-      {/* Main Grid: Recent Papers & Literature Reviews + AI Insights */}
+      {/* 4. Main Two-Column Research Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* 2-column wide section for Recent Papers & Reviews */}
+        {/* Left Column (2 cols wide): Recent Research Papers & Quick Actions */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Recent Papers Section */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-accent-400" />
-                  <span>Recent Research Papers</span>
-                </h3>
-                <p className="text-xs text-zinc-400 mt-0.5">
-                  Extracted, indexed and ready for semantic comparison
-                </p>
-              </div>
+          <CompactPaperList
+            papers={papers}
+            onOpenPaper={(paper) => setSelectedPaper(paper)}
+          />
 
-              <button
-                onClick={() => navigate('/papers')}
-                className="text-xs text-accent-400 hover:text-accent-300 font-medium flex items-center gap-1 group"
-              >
-                <span>View All Papers ({papers.length})</span>
-                <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {papers.slice(0, 4).map((paper) => (
-                <RecentPaperCard
-                  key={paper.id}
-                  paper={paper}
-                  onOpenDetails={(p) => setDetailsPaper(p)}
-                  onOpenSummary={(p) => setSummaryPaper(p)}
-                />
-              ))}
-            </div>
-          </div>
-
-          {/* Recent Literature Reviews Section */}
-          <RecentReviewsSection reviews={reviews} />
+          <QuickActionsBar />
         </div>
 
-        {/* 1-column wide sidebar: AI Insights Panel */}
-        <div className="space-y-6">
-          <AIInsightsPanel insights={insights} />
+        {/* Right Column (1 col wide): Continue Research & Synthesis Guide */}
+        <div className="space-y-4">
+          <ContinueReviewCard latestReview={latestReview} />
+
+          {/* Academic Synthesis Purpose Callout */}
+          <div className="p-4 rounded-xl border border-zinc-850 bg-zinc-950/40 space-y-2.5">
+            <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400 font-medium flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-accent-400" />
+              Automated Synthesis
+            </span>
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              PaperPilot automates the manual effort of literature reviews:
+            </p>
+            <ul className="space-y-1.5 text-[11px] text-zinc-300 font-sans">
+              <li className="flex items-start gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-accent-400 shrink-0 mt-0.5" />
+                <span>Extracts methodologies, datasets & key findings</span>
+              </li>
+              <li className="flex items-start gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-accent-400 shrink-0 mt-0.5" />
+                <span>Identifies contradictions & research gaps</span>
+              </li>
+              <li className="flex items-start gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-accent-400 shrink-0 mt-0.5" />
+                <span>Generates publication-ready IEEE/APA manuscripts</span>
+              </li>
+            </ul>
+          </div>
         </div>
       </div>
 
-      {/* Modals for Quick Summary & Details */}
-      <PaperSummaryModal
-        paper={summaryPaper}
-        isOpen={!!summaryPaper}
-        onClose={() => setSummaryPaper(null)}
+      {/* Modals */}
+      <PaperDetailsModal
+        paper={selectedPaper}
+        isOpen={Boolean(selectedPaper)}
+        onClose={() => setSelectedPaper(null)}
+        onOpenSummary={(paper) => {
+          setSelectedPaper(null);
+          setSummaryPaper(paper);
+        }}
       />
 
-      <PaperDetailsModal
-        paper={detailsPaper}
-        isOpen={!!detailsPaper}
-        onClose={() => setDetailsPaper(null)}
-        onOpenSummary={(p) => setSummaryPaper(p)}
+      <PaperSummaryModal
+        paper={summaryPaper}
+        isOpen={Boolean(summaryPaper)}
+        onClose={() => setSummaryPaper(null)}
       />
     </div>
   );

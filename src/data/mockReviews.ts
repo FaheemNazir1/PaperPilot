@@ -20,7 +20,7 @@ export const mockReviews: LiteratureReview[] = [
     sections: [
       {
         id: 'sec-1',
-        title: '1. Introduction & Background',
+        title: '1. Overview & Introduction',
         content: `Chronic psychological stress is an established catalyst for cardiovascular disorders, immune suppression, and psychiatric morbidities. Conventional clinical diagnostics rely on retrospective psychometric self-reporting scales (e.g., Perceived Stress Scale [PSS]), which inevitably suffer from recall bias, subjective variance, and latency.
 
 The emergence of non-invasive wearable biosensors enables autonomous, real-time physiological telemetry. Signals such as Electrocardiography (ECG), Photoplethysmography (PPG), Electrodermal Activity (EDA), and Respiration (RESP) reflect autonomic nervous system (ANS) tone. Specifically, sympathetic activation induces skin conductance spikes and depresses heart rate variability, whereas parasympathetic rebound restores respiratory sinus arrhythmia [1].
@@ -29,44 +29,56 @@ Despite rapid algorithmic progress in neural representation learning, translatin
       },
       {
         id: 'sec-2',
-        title: '2. Thematic Analysis: Modalities & Fusion Strategies',
-        content: `A central theme permeating the surveyed corpus is the categorical limitation of unimodal sensing. Single-channel classifiers consistently report accuracy degradation under physical movement or ambient thermal shifts. Consequently, multimodal sensor fusion represents the prevailing paradigm across all twelve investigated works.
-
-Three distinct architectural themes characterize the literature:
-• Early Input-Level Concatenation: Raw time-series or spectrogram representations are fused at the initial network layer. While computationally light, this strategy forces diverse sampling frequencies into an arbitrary shared temporal grid, obscuring transient autonomic reflexes.
-• Late Decision-Level Aggregation: Independent neural backbones process individual modalities, combining predictions via learned softmax weighting or Bayesian voting. This isolates channel failures but sacrifices inter-modality cross-correlations [1, 3].
-• Intermediate Cross-Modal Attention: The most promising paradigm employs cross-attention mechanisms where ECG temporal representations dynamically query and modulate EDA feature maps [1, 4]. This approach yields an average +6.8% F1-score enhancement over unimodal baselines.`
+        title: '2. Surveyed Methodologies',
+        content: `Three primary methodological paradigms dominate the literature:
+• Multimodal Early Fusion: Concatenating normalized temporal sensor channels at the input layer into 1D convolutional filter banks. While computationally lightweight for microcontrollers, it imposes a rigid temporal alignment across disparate sampling rates [1].
+• Hierarchical Cross-Modal Attention: Employing query-key-value self-attention where ECG autonomic features dynamically attend to electrodermal arousal spikes [1, 4]. This cross-attention mechanism achieves the highest reported classification stability, yielding a +6.8% F1-score improvement over unimodal baselines.
+• Contrastive Self-Supervised Graph Representations: Constructing topological graph representations of cardiac intervals and autonomic co-activations to pre-train backbones on unlabeled physiological data [3].`
       },
       {
         id: 'sec-3',
-        title: '3. Methodological Comparison across Benchmark Datasets',
-        content: `A rigorous comparison of evaluated architectures reveals a pronounced shift from classical Convolutional-Recurrent hybrids (CNN-LSTM) toward sparse hierarchical transformers and neural operators.
-
-On the benchmark WESAD dataset (15 subjects subjected to Trier Social Stress Test regimes):
-• CNN-LSTM models achieved 86.4% mean F1-score across 3-class affective states (baseline, stress, amusement) [1].
-• Dual-stream cross-attention transformers elevated performance to 94.2% F1-score, driven by synchronized temporal alignment between cardiac and galvanic peaks [1, 4].
-• However, when evaluated under strict Leave-One-Subject-Out (LOSO) regimes, reported scores dropped by 14.5% to 22.0%, exposing severe sensitivity to individual basal autonomic variability [1, 5].`
+        title: '3. Benchmark Datasets & Cohort Characteristics',
+        content: `Empirical evaluations across the surveyed literature primarily rely on four canonical open-source physiological corpora:
+• WESAD (Wearable Stress and Affect Detection): 15 subjects monitored via wrist and chest sensors during Trier Social Stress Tests (TSST), amusement, and meditation baselines [1].
+• DEAP (Database for Emotion Analysis using Physiological Signals): 32 participants reacting to affective audiovisual stimuli with 32-channel EEG and peripheral biosignals [2].
+• SWELL-KW: 25 office knowledge workers subjected to cognitive workload manipulations (email interruptions and time pressure) [1].
+• MIMIC-III / PhysioNet Challenge: Clinical ICU high-resolution waveform recordings for acute autonomic decompensation benchmark validation [5].`
       },
       {
         id: 'sec-4',
-        title: '4. Key Findings & Empirical Evidence',
+        title: '4. Key Empirical Findings',
         content: `Synthesizing experimental results across the corpus reveals three core empirical findings:
 1. Differential Modality Salience: EDA and ECG collectively account for over 78% of discriminating power under acute cognitive and social evaluative stressors, whereas respiration predominantly aids in disambiguating physical exertion from psychological strain [1].
-2. Pre-training Benefits: Graph-based contrastive pre-training and self-supervised representations on unannotated biosignal streams improve downstream task adaptation by up to 14% on small clinical cohorts [3].
-3. Grounding & Hallucination Mitigation: When deploying AI literature synthesis copilots to interpret clinical telemetry, post-hoc citation verification pipelines eliminate 81% of ungrounded claim hallucinations [5].`
+2. Attention-Based Robustness: Attention-guided feature fusion reduces motion artifact misclassifications by 31% compared to static late concatenation [1, 4].
+3. Pre-training Benefits: Graph-based contrastive pre-training and self-supervised representations on unannotated biosignal streams improve downstream task adaptation by up to 14% on small clinical cohorts [3].`
       },
       {
         id: 'sec-5',
-        title: '5. Critical Research Gaps & Vulnerabilities',
-        content: `Despite remarkable laboratory metrics, four critical research gaps impede clinical and ecological deployment:
-• Limited Dataset Diversity & Demographic Skew: Over 75% of public research relies on young, healthy adult cohorts, leaving pediatric, geriatric, and cardiovascular patient groups completely uncharacterized.
-• Cross-Dataset Generalization Failure: Algorithms trained on WESAD experience severe performance drops of 18–35% when tested on independent benchmarks (e.g., DEAP, SWELL-KW) due to unstandardized electrode placements and sampling rates [1, 2].
-• Neglect of Embedded Edge Latency: Less than 10% of studies benchmark inference latency, thermal dissipation, or battery consumption on commercial smartwatch microcontrollers.
-• Interpretability Deficits: Black-box attention weights do not reliably correlate with clinical causal biomarkers, restricting clinician adoption.`
+        title: '5. Contradictions & Methodological Differences',
+        content: `Significant discrepancies emerge when evaluating subject-dependent versus subject-independent protocols:
+• Intra-subject vs. Inter-subject Validation: Studies employing random k-fold cross-validation report optimistic accuracies exceeding 94%. However, when evaluated under strict Leave-One-Subject-Out (LOSO) regimes, reported scores drop by 14.5% to 22.0%, exposing severe sensitivity to individual basal autonomic variability [1, 5].
+• Signal Pre-filtering Controversy: While early studies advocate aggressive bandpass filtering and wavelet denoising, recent deep transformer literature demonstrates that raw, unfiltered waveforms with temporal dropout yield superior generalizability across unseen sensor hardware [4].`
       },
       {
         id: 'sec-6',
-        title: '6. Conclusion & Future Roadmap',
+        title: '6. Reported Limitations',
+        content: `Across the analyzed literature, authors consistently acknowledge several structural limitations:
+• Lack of Ecological Validity: Laboratory-induced stressors (mental arithmetic, public speaking) fail to mirror the chronic, low-intensity stressors characteristic of daily workplace environments [1, 2].
+• Demographic Homogeneity: Cohorts remain overwhelmingly biased toward university students aged 19–27, leaving pediatric, geriatric, and hypertensive patient groups underrepresented [1].
+• Sensor Drift & Motion Artifacts: Physical movement during ambulatory activities introduces high-amplitude artifacts that corrupt PPG and EDA baseline conductance measurements [1, 3].`
+      },
+      {
+        id: 'sec-7',
+        title: '7. Unaddressed Research Gaps',
+        content: `Synthesizing limitations and cross-study differences highlights four critical research gaps:
+1. Multi-Center Standardization Gap: Lack of standardized electrode placements and sampling frequencies across open datasets severely limits cross-corpus validation.
+2. Edge Latency and Computational Budget: Fewer than 10% of surveyed studies benchmark inference latency, thermal dissipation, or battery consumption on commercial smartwatch microcontrollers.
+3. Adaptive Subject Calibration: Absence of few-shot or online domain adaptation methods that can calibrate to a new user's physiological baseline within 5 minutes of wear.
+4. Clinician-Centric Interpretability: Black-box neural representations fail to map to standard clinical autonomic indices (e.g., LF/HF ratio, SDNN), restricting diagnostic trust.`
+      },
+      {
+        id: 'sec-8',
+        title: '8. Conclusion & Future Roadmap',
         content: `Multimodal physiological stress detection has achieved algorithmic maturity in controlled settings, proving that intermediate cross-attention fusion definitively surpasses unimodal telemetry. However, the subsequent frontier of research requires a decisive pivot from marginal model tweaking to resolving foundational dataset distribution shifts.
 
 Subsequent investigations should prioritize: (1) self-supervised domain adaptation to eliminate subject-specific calibration overhead; (2) open-source multi-center benchmark standardization; and (3) integer quantization for sub-15ms edge deployment on wearable biomedical hardware.`

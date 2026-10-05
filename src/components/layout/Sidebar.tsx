@@ -9,7 +9,6 @@ import {
   Lightbulb,
   Bot,
   Settings,
-  FolderKanban,
   ChevronRight,
   ChevronLeft,
   Sparkles,
@@ -35,12 +34,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const navItems = [
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, badge: null },
-    { name: 'My Papers', path: '/papers', icon: FileText, badge: '12' },
+    { name: 'My Papers', path: '/papers', icon: FileText, badge: '10' },
     { name: 'Upload Papers', path: '/upload', icon: Upload, badge: null },
-    { name: 'Literature Review', path: '/literature-review', icon: BookOpen, badge: '8' },
+    { name: 'Literature Review', path: '/literature-review', icon: BookOpen, badge: null },
     { name: 'Compare Papers', path: '/compare', icon: GitCompare, badge: null },
-    { name: 'Research Gaps', path: '/research-gaps', icon: Lightbulb, badge: '23' },
-    { name: 'AI Assistant', path: '/assistant', icon: Bot, badge: 'Active' },
+    { name: 'Research Gaps', path: '/research-gaps', icon: Lightbulb, badge: null },
+    { name: 'AI Assistant', path: '/assistant', icon: Bot, badge: null },
   ];
 
   const isActiveRoute = (path: string) => {
@@ -156,32 +155,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
           })}
 
           {/* Separator */}
-          <div className="pt-3 pb-1">
-            <div className="h-px bg-zinc-800/80 mx-1 mb-2" />
-            {!isCollapsed && (
-              <div className="px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-semibold">
-                Workspace
-              </div>
-            )}
+          <div className="pt-2 pb-1">
+            <div className="h-px bg-zinc-800/80 mx-1 mb-1" />
           </div>
-
-          {/* Project Switcher Info (Subtle) */}
-          {!isCollapsed && (
-            <div className="px-2.5 py-2 rounded-lg bg-zinc-900/30 border border-zinc-850 text-xs">
-              <div className="flex items-center justify-between text-zinc-400 mb-0.5">
-                <span className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider">
-                  <FolderKanban className="w-3 h-3 text-accent-400" />
-                  Active Project
-                </span>
-              </div>
-              <div className="text-zinc-200 font-medium text-xs truncate">
-                Scientific Literature Synthesis
-              </div>
-              <div className="text-[10px] text-zinc-400 mt-0.5 font-mono">
-                12 papers • 4 domains
-              </div>
-            </div>
-          )}
 
           {/* Settings */}
           <NavLink

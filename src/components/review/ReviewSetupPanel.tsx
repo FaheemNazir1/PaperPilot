@@ -80,8 +80,27 @@ export const ReviewSetupPanel: React.FC<ReviewSetupPanelProps> = ({
         </div>
 
         <Badge variant="accent" size="sm" className="font-mono">
-          12 Papers In Scope
+          10 Papers Selected
         </Badge>
+      </div>
+
+      {/* Synthesis Step Pipeline */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 pb-4 mb-4 border-b border-zinc-800/60 text-center font-mono text-[10px]">
+        <div className="p-1.5 rounded bg-zinc-950 border border-zinc-850 text-accent-400 font-semibold">
+          1. Select Papers
+        </div>
+        <div className="p-1.5 rounded bg-zinc-950 border border-zinc-850 text-accent-400 font-semibold">
+          2. Choose Topic
+        </div>
+        <div className="p-1.5 rounded bg-zinc-950 border border-zinc-850 text-accent-400 font-semibold">
+          3. Review Style
+        </div>
+        <div className="p-1.5 rounded bg-zinc-950 border border-zinc-850 text-accent-400 font-semibold">
+          4. Select Focus
+        </div>
+        <div className="p-1.5 rounded bg-accent-600/20 border border-accent-500/40 text-accent-300 font-semibold col-span-2 sm:col-span-1">
+          5. Generate Review
+        </div>
       </div>
 
       <div className="space-y-4">
