@@ -13,9 +13,20 @@ const isLocalhost =
   typeof window !== 'undefined' &&
   (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
-const API_BASE_URL =
-  (import.meta.env.VITE_API_URL as string | undefined) ||
-  (isLocalhost ? 'http://127.0.0.1:8000/api/v1' : null);
+const API_PREFIX = '/api/v1';
+
+/** Accepts either the server origin or the full versioned URL and always returns `<origin>/api/v1`. */
+function withApiPrefix(url: string): string {
+  const trimmed = url.trim().replace(/\/+$/, '');
+  return trimmed.endsWith(API_PREFIX) ? trimmed : `${trimmed}${API_PREFIX}`;
+}
+
+const configuredUrl = import.meta.env.VITE_API_URL as string | undefined;
+const API_BASE_URL = configuredUrl?.trim()
+  ? withApiPrefix(configuredUrl)
+  : isLocalhost
+    ? `http://127.0.0.1:8000${API_PREFIX}`
+    : null;
 
 /** Per-file upload limit enforced client-side; the server enforces its own (PAPERPILOT_MAX_UPLOAD_MB). */
 export const MAX_UPLOAD_MB = Number(import.meta.env.VITE_MAX_UPLOAD_MB) || 25;
