@@ -15,6 +15,10 @@ build/
 *.pem
 *.key
 *.cert
+*service-account*.json
+*serviceAccount*.json
+firebase-adminsdk*.json
+
 
 # Python
 __pycache__/

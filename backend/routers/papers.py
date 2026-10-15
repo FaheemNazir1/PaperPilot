@@ -1,233 +1,242 @@
+import logging
 import os
-import shutil
+import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 
+from backend.auth.firebase_auth import get_current_user, get_optional_current_user
 from backend.db.database import (
     delete_paper,
     get_all_papers,
+    get_owned_file_path,
     get_paper,
     get_paper_sections,
     save_paper,
 )
-from backend.models.schemas import Paper, PaperSection, UploadItem
-from backend.services.pdf_extractor import extract_pdf_content
-from backend.services.section_detector import (
-    detect_title_and_authors,
-    extract_key_elements,
-    segment_sections,
-)
-from backend.services.text_cleaner import clean_text_pipeline
+from backend.services.pdf_extractor import read_basic_metadata
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/papers", tags=["papers"])
 
 STORAGE_DIR = Path(__file__).resolve().parent.parent / "storage" / "uploads"
 STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 
+# Per-file upload limit, configurable via PAPERPILOT_MAX_UPLOAD_MB (default 25 MB).
+MAX_UPLOAD_MB = float(os.getenv("PAPERPILOT_MAX_UPLOAD_MB", "25"))
+MAX_UPLOAD_BYTES = int(MAX_UPLOAD_MB * 1024 * 1024)
+_READ_CHUNK = 1024 * 1024
+
 
 @router.get("", response_model=List[Dict[str, Any]])
 def list_papers(
+    include_demo: bool = Query(False, description="Include public benchmark/demo papers in results"),
     search: Optional[str] = Query(None, description="Search term for title/abstract/authors"),
     category: Optional[str] = Query(None, description="Filter by category"),
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user),
 ):
-    """Retrieves all indexed papers with optional query filters."""
-    return get_all_papers(search=search, category=category)
+    """
+    Retrieves papers with strict user ownership isolation:
+    - Authenticated user without include_demo -> ONLY their own private papers.
+    - Authenticated user with include_demo=true -> their papers PLUS clearly marked demo papers.
+    - Unauthenticated request -> public benchmark/demo papers only.
+    """
+    user_id = current_user["id"] if current_user else None
+    return get_all_papers(
+        user_id=user_id,
+        include_demo=include_demo,
+        search=search,
+        category=category,
+    )
 
 
 @router.get("/{paper_id}")
-def get_paper_by_id(paper_id: str):
-    """Retrieves single paper with its sections, original_text, and cleaned_text."""
-    paper = get_paper(paper_id)
+def get_paper_by_id(
+    paper_id: str,
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user),
+):
+    """
+    Retrieves a single paper with its sections, original_text, and cleaned_text.
+    Strictly enforces ownership: private papers are only accessible to their owner.
+    Unauthorized requests return 404 Not Found to prevent leaking paper existence.
+    """
+    user_id = current_user["id"] if current_user else None
+    paper = get_paper(paper_id, user_id=user_id)
     if not paper:
         raise HTTPException(status_code=404, detail="Paper not found")
     return paper
 
 
 @router.get("/{paper_id}/sections", response_model=List[Dict[str, Any]])
-def get_sections(paper_id: str):
-    """Retrieves parsed structured sections for a paper."""
-    sections = get_paper_sections(paper_id)
+def get_sections(
+    paper_id: str,
+    current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user),
+):
+    """
+    Retrieves parsed structured sections for a paper.
+    Enforces user ownership: private paper sections are only accessible to their owner.
+    """
+    user_id = current_user["id"] if current_user else None
+    sections = get_paper_sections(paper_id, user_id=user_id)
     if not sections:
-        # Check if paper exists
-        paper = get_paper(paper_id)
+        paper = get_paper(paper_id, user_id=user_id)
         if not paper:
             raise HTTPException(status_code=404, detail="Paper not found")
     return sections
 
 
 @router.delete("/{paper_id}")
-def remove_paper(paper_id: str):
-    """Deletes paper from database."""
-    success = delete_paper(paper_id)
+def remove_paper(
+    paper_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """
+    Deletes paper from database.
+    Requires authentication. Only allows deleting papers owned by the authenticated user.
+    """
+    stored_file = get_owned_file_path(paper_id, current_user["id"])
+    success = delete_paper(paper_id, user_id=current_user["id"])
     if not success:
-        raise HTTPException(status_code=404, detail="Paper not found")
+        raise HTTPException(status_code=404, detail="Paper not found or unauthorized")
+    if stored_file:
+        try:
+            Path(stored_file).unlink(missing_ok=True)
+        except OSError:
+            logger.warning("Could not remove stored file for deleted paper %s", paper_id)
     return {"message": "Paper successfully deleted", "id": paper_id}
 
 
+def _format_size(num_bytes: int) -> str:
+    if num_bytes < 1024 * 1024:
+        return f"{max(1, round(num_bytes / 1024))} KB"
+    return f"{num_bytes / (1024 * 1024):.1f} MB"
+
+
+def _error_item(name: str, message: str) -> Dict[str, Any]:
+    return {"id": f"up-{uuid.uuid4().hex[:8]}", "name": name, "status": "error", "error": message}
+
+
+def _store_upload(file: UploadFile, destination: Path) -> int:
+    """
+    Streams the upload to destination, enforcing the size limit and the %PDF header.
+    Returns the byte count. Raises ValueError with a user-facing message on rejection;
+    the partial file is removed in that case.
+    """
+    total = 0
+    try:
+        with destination.open("wb") as buffer:
+            while True:
+                chunk = file.file.read(_READ_CHUNK)
+                if not chunk:
+                    break
+                if total == 0 and not chunk.startswith(b"%PDF-"):
+                    raise ValueError("This file is not a valid PDF document.")
+                total += len(chunk)
+                if total > MAX_UPLOAD_BYTES:
+                    raise ValueError(f"File is larger than the {MAX_UPLOAD_MB:g} MB limit.")
+                buffer.write(chunk)
+        if total == 0:
+            raise ValueError("The file is empty.")
+    except Exception:
+        destination.unlink(missing_ok=True)
+        raise
+    return total
+
+
 @router.post("/upload")
-async def upload_pdf_papers(files: List[UploadFile] = File(...)):
+async def upload_pdf_papers(
+    files: List[UploadFile] = File(...),
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
     """
-    Accepts one or more PDF files and executes the extraction pipeline:
-    PyMuPDF (original_text) -> Text Cleaning (cleaned_text) -> Section Detection -> SQLite
+    Stores one or more PDFs for the authenticated user and records them in SQLite.
+
+    This is a storage operation only: no text extraction, section detection, embeddings
+    or analysis runs here, and uploaded papers are marked status="Uploaded". Ownership
+    always comes from the verified Firebase token, never from the request body.
     """
+    user_id = current_user["id"]
+    user_storage_dir = STORAGE_DIR / str(user_id)
+    user_storage_dir.mkdir(parents=True, exist_ok=True)
+
     uploaded_items: List[Dict[str, Any]] = []
     saved_papers: List[Dict[str, Any]] = []
 
     for file in files:
-        if not file.filename.lower().endswith(".pdf"):
-            uploaded_items.append(
-                {
-                    "id": f"up-{uuid.uuid4().hex[:8]}",
-                    "name": file.filename,
-                    "size": "0 MB",
-                    "progress": 100,
-                    "status": "error",
-                    "error": "Only PDF documents are supported.",
-                }
-            )
+        display_name = Path(file.filename or "").name
+        if not display_name or not display_name.lower().endswith(".pdf"):
+            uploaded_items.append(_error_item(display_name or "unknown", "Only PDF documents are supported."))
             continue
 
         paper_id = f"paper-{uuid.uuid4().hex[:8]}"
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        safe_filename = f"{timestamp}_{file.filename.replace(' ', '_')}"
-        file_path = STORAGE_DIR / safe_filename
+        safe_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", Path(display_name).stem)[:80] or "paper"
+        file_path = user_storage_dir / f"{paper_id}_{safe_stem}.pdf"
 
-        # 1. Save uploaded file to disk
         try:
-            with file_path.open("wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
-        except Exception as e:
-            uploaded_items.append(
-                {
-                    "id": f"up-{uuid.uuid4().hex[:8]}",
-                    "name": file.filename,
-                    "size": "0 MB",
-                    "progress": 100,
-                    "status": "error",
-                    "error": f"Failed to save file: {str(e)}",
-                }
-            )
+            size_bytes = _store_upload(file, file_path)
+        except ValueError as e:
+            uploaded_items.append(_error_item(display_name, str(e)))
+            continue
+        except Exception:
+            logger.exception("Failed to store upload %s", display_name)
+            uploaded_items.append(_error_item(display_name, "The server could not save this file. Please try again."))
             continue
 
-        file_size_mb = round(os.path.getsize(file_path) / (1024 * 1024), 2)
-        size_str = f"{file_size_mb} MB"
-
-        # 2. Extract content with PyMuPDF
+        # Basic metadata only (page count, embedded title). Failure means the PDF is unreadable.
         try:
-            extracted = extract_pdf_content(str(file_path))
-            raw_original_text = extracted["original_text"]
-            pages = extracted["pages"]
-            blocks = extracted["blocks"]
-            meta_title = extracted["meta_title"]
-            page_count = extracted["page_count"]
+            meta = read_basic_metadata(str(file_path))
+        except Exception:
+            file_path.unlink(missing_ok=True)
+            uploaded_items.append(_error_item(display_name, "This PDF could not be opened. It may be corrupted or encrypted."))
+            continue
 
-            # 3. Clean text (dehyphenation, ligature normalization, header/footer removal)
-            cleaned_text = clean_text_pipeline(raw_original_text, pages)
+        now = datetime.now(timezone.utc)
+        title = meta["meta_title"] or Path(display_name).stem.replace("_", " ").strip() or display_name
+        authors = [a.strip() for a in re.split(r"[;,]", meta["meta_author"]) if a.strip()]
 
-            # 4. Detect title & authors
-            detected_title, detected_authors = detect_title_and_authors(blocks, meta_title=meta_title)
-            if detected_title == "Untitled Research Paper" and file.filename:
-                # Use filename without extension
-                detected_title = Path(file.filename).stem.replace("_", " ").title()
+        paper_data = {
+            "id": paper_id,
+            "title": title,
+            "authors": authors,
+            "year": now.year,
+            "venue": "Uploaded PDF",
+            "status": "Uploaded",
+            "pdfSize": _format_size(size_bytes),
+            "addedAt": now.strftime("%Y-%m-%d"),
+            "file_path": str(file_path),
+            "originalFilename": display_name,
+            "sizeBytes": size_bytes,
+            "pageCount": meta["page_count"],
+            "uploadedAt": now.isoformat(),
+        }
 
-            # 5. Segment structured sections
-            sections = segment_sections(cleaned_text, blocks, paper_id)
+        try:
+            saved = save_paper(paper_data, [], user_id=user_id, is_demo=False)
+        except Exception:
+            logger.exception("Failed to record upload %s", display_name)
+            file_path.unlink(missing_ok=True)
+            uploaded_items.append(_error_item(display_name, "The paper could not be saved. Please try again."))
+            continue
 
-            # 6. Extract key scientific elements (Abstract, Methodology, Key Findings, Limitations)
-            key_elements = extract_key_elements(sections, cleaned_text)
-
-            # Check if title and abstract sections exist, add if missing
-            has_title_sec = any(s["section_type"] == "title" for s in sections)
-            if not has_title_sec:
-                sections.insert(
-                    0,
-                    {
-                        "id": f"{paper_id}-sec-title",
-                        "paper_id": paper_id,
-                        "section_type": "title",
-                        "heading": "Title",
-                        "content": detected_title,
-                        "page_start": 1,
-                        "page_end": 1,
-                    },
-                )
-
-            has_abstract_sec = any(s["section_type"] == "abstract" for s in sections)
-            if not has_abstract_sec and key_elements["abstract"]:
-                sections.insert(
-                    1,
-                    {
-                        "id": f"{paper_id}-sec-abstract",
-                        "paper_id": paper_id,
-                        "section_type": "abstract",
-                        "heading": "Abstract",
-                        "content": key_elements["abstract"],
-                        "page_start": 1,
-                        "page_end": 1,
-                    },
-                )
-
-            # 7. Construct Paper Record
-            paper_data = {
-                "id": paper_id,
-                "title": detected_title,
-                "authors": detected_authors,
-                "year": datetime.now().year,
-                "venue": "Uploaded Document",
-                "doi": None,
-                "category": "Computer Science",
-                "researchArea": "Scientific Literature",
-                "tags": ["Ingested PDF", "Extracted Sections"],
-                "abstract": key_elements["abstract"],
-                "summary": f"Structured analysis of {detected_title}. Key methodology: {key_elements['methodology'][:200]}",
-                "methodology": key_elements["methodology"],
-                "keyFindings": key_elements["keyFindings"],
-                "limitations": key_elements["limitations"],
-                "dataset": key_elements["dataset"],
-                "model": key_elements["model"],
-                "status": "Indexed",
-                "citationsCount": 0,
-                "pdfSize": size_str,
-                "addedAt": datetime.now().strftime("%Y-%m-%d"),
-                "original_text": raw_original_text,
-                "cleaned_text": cleaned_text,
-                "file_path": str(file_path),
+        saved_papers.append(saved)
+        uploaded_items.append(
+            {
+                "id": f"up-{paper_id}",
+                "name": display_name,
+                "size": _format_size(size_bytes),
+                "status": "uploaded",
+                "pages": meta["page_count"],
+                "paperId": paper_id,
+                "title": title,
             }
-
-            # 8. Save to SQLite
-            saved_paper = save_paper(paper_data, sections)
-            saved_papers.append(saved_paper)
-
-            uploaded_items.append(
-                {
-                    "id": f"up-{paper_id}",
-                    "name": file.filename,
-                    "size": size_str,
-                    "progress": 100,
-                    "status": "ready",
-                    "pages": page_count,
-                    "paperId": paper_id,
-                    "title": detected_title,
-                }
-            )
-
-        except Exception as e:
-            uploaded_items.append(
-                {
-                    "id": f"up-{uuid.uuid4().hex[:8]}",
-                    "name": file.filename,
-                    "size": size_str,
-                    "progress": 100,
-                    "status": "error",
-                    "error": f"Extraction failed: {str(e)}",
-                }
-            )
+        )
 
     return {
-        "success": True,
+        "success": any(i["status"] == "uploaded" for i in uploaded_items),
+        "maxUploadMb": MAX_UPLOAD_MB,
         "items": uploaded_items,
         "papers": saved_papers,
     }

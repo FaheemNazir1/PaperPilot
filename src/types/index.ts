@@ -15,13 +15,21 @@ export interface Paper {
   limitations: string[];
   dataset: string;
   model: string;
-  status: 'Indexed' | 'Embedding Ready' | 'Processing' | 'Analyzed';
+  /** 'Uploaded' = the PDF is stored; nothing has been analysed. Other values only appear on demo papers. */
+  status: 'Uploaded' | 'Indexed' | 'Embedding Ready' | 'Processing' | 'Analyzed';
   citationsCount: number;
   pdfSize: string;
   addedAt: string;
+  userId?: number;
+  is_demo?: boolean;
   original_text?: string;
   cleaned_text?: string;
   sections?: PaperSection[];
+  /** Upload metadata (user-owned papers only) */
+  originalFilename?: string | null;
+  sizeBytes?: number | null;
+  pageCount?: number | null;
+  uploadedAt?: string | null;
 }
 
 export interface PaperSection {
@@ -115,11 +123,19 @@ export interface ChatMessage {
   suggestedFollowUps?: string[];
 }
 
-export interface UploadItem {
+/** Per-file outcome returned by POST /papers/upload */
+export interface UploadResult {
   id: string;
   name: string;
-  size: string;
-  progress: number;
-  status: 'queued' | 'uploading' | 'extracting' | 'analyzing' | 'indexed' | 'ready' | 'error';
-  pages?: number;
+  status: 'uploaded' | 'error';
+  size?: string;
+  pages?: number | null;
+  paperId?: string;
+  title?: string;
+  error?: string;
+}
+
+export interface LibraryStats {
+  personalPapers: number;
+  demoPapers: number;
 }

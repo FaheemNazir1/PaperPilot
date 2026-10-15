@@ -3,18 +3,14 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Menu,
   Search,
-  BookOpen,
-  Upload,
-  User,
   Settings,
   ChevronDown,
-  Check,
-  Sparkles,
-  Command
+  Command,
+  LogOut
 } from 'lucide-react';
-import { Button } from '../common/Button';
 import { CommandPalette } from '../common/CommandPalette';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface HeaderProps {
   onOpenMobileNav: () => void;
@@ -30,6 +26,7 @@ export const Header: React.FC<HeaderProps> = ({
   const location = useLocation();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { currentUser, signOut } = useAuth();
 
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
@@ -62,15 +59,36 @@ export const Header: React.FC<HeaderProps> = ({
 
   const getBreadcrumb = () => {
     const path = location.pathname;
-    if (path === '/' || path === '/dashboard') return 'Dashboard';
+    if (path === '/' || path === '/dashboard') return 'Workspace';
     if (path.startsWith('/papers')) return 'My Papers';
-    if (path.startsWith('/upload')) return 'Upload Research Papers';
-    if (path.startsWith('/literature-review')) return 'Literature Review Generator';
-    if (path.startsWith('/compare')) return 'Compare Papers Matrix';
-    if (path.startsWith('/research-gaps')) return 'Research Gaps & Map';
-    if (path.startsWith('/assistant')) return 'PaperPilot AI Assistant';
+    if (path.startsWith('/upload')) return 'Upload Papers';
+    if (path.startsWith('/literature-review')) return 'Literature Review';
+    if (path.startsWith('/compare')) return 'Compare Papers';
+    if (path.startsWith('/research-gaps')) return 'Research Gaps';
+    if (path.startsWith('/assistant')) return 'AI Assistant';
     if (path.startsWith('/settings')) return 'Settings';
     return 'Workspace';
+  };
+
+  const userInitials = currentUser?.displayName
+    ? currentUser.displayName
+        .split(' ')
+        .map((part) => part[0])
+        .join('')
+        .toUpperCase()
+        .slice(0, 2)
+    : (currentUser?.email?.slice(0, 2).toUpperCase() || 'RP');
+
+  const handleSignOut = async () => {
+    setProfileDropdownOpen(false);
+    try {
+      await signOut();
+      showToast('Signed out of PaperPilot', 'info');
+      navigate('/login');
+    } catch (error) {
+      console.error('Sign-out error:', error);
+      showToast('Error signing out', 'error');
+    }
   };
 
   return (
@@ -102,7 +120,7 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <div className="flex items-center gap-2.5">
               <Search className="w-3.5 h-3.5 text-zinc-500 group-hover:text-accent-400 transition-colors" />
-              <span>Search papers, commands, tools...</span>
+              <span>Jump to a page…</span>
             </div>
             <div className="flex items-center gap-1 font-mono text-[10px] text-zinc-400 bg-zinc-800/80 border border-zinc-700/60 px-1.5 py-0.5 rounded">
               <Command className="w-3 h-3 inline" />
@@ -111,56 +129,59 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </div>
 
-        {/* Right: Paper Index Status, Quick CTAs & Profile Menu */}
+        {/* Right: Profile Menu */}
         <div className="flex items-center gap-3">
-          {/* Index status */}
-          <div className="hidden xl:flex items-center gap-2 text-xs text-zinc-400 bg-zinc-900/60 px-2.5 py-1 rounded-md border border-zinc-800/60 font-mono text-[11px]">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>12 Papers Indexed</span>
-          </div>
-
-          <Button
-            variant="outline"
-            size="sm"
-            leftIcon={<BookOpen className="w-3.5 h-3.5 text-zinc-400" />}
-            onClick={() => navigate('/literature-review')}
-            className="hidden sm:inline-flex"
-          >
-            Review
-          </Button>
-
-          <Button
-            variant="primary"
-            size="sm"
-            leftIcon={<Upload className="w-3.5 h-3.5" />}
-            onClick={() => navigate('/upload')}
-          >
-            <span className="hidden sm:inline">Upload</span>
-            <span className="sm:hidden">+</span>
-          </Button>
-
           {/* User Profile Menu Dropdown */}
           <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setProfileDropdownOpen((prev) => !prev)}
-              className="flex items-center gap-2 p-1 pl-1.5 pr-2 rounded-lg bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-xs text-zinc-300 hover:text-white transition-colors"
+              aria-label="User profile menu"
+              className="flex items-center gap-2 p-1 pl-1.5 pr-2 rounded-lg bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-xs text-zinc-300 hover:text-white transition-colors cursor-pointer"
             >
-              <div className="w-6 h-6 rounded-full bg-accent-600/30 text-accent-300 font-semibold flex items-center justify-center text-[10px] border border-accent-500/40">
-                RP
-              </div>
+              {currentUser?.photoURL ? (
+                <img
+                  src={currentUser.photoURL}
+                  alt={currentUser.displayName || 'Google User'}
+                  className="w-6 h-6 rounded-full object-cover border border-zinc-700"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <div className="w-6 h-6 rounded-full bg-accent-600/30 text-accent-300 font-semibold flex items-center justify-center text-[10px] border border-accent-500/40">
+                  {userInitials}
+                </div>
+              )}
               <ChevronDown className="w-3 h-3 text-zinc-500" />
             </button>
 
             {profileDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-56 bg-zinc-900 border border-zinc-750 rounded-xl shadow-2xl p-1.5 text-xs z-50 animate-in zoom-in-95 duration-100">
+              <div className="absolute right-0 mt-2 w-64 bg-zinc-900 border border-zinc-750 rounded-xl shadow-2xl p-1.5 text-xs z-50 animate-in zoom-in-95 duration-100">
+                {/* Authenticated User Header */}
                 <div className="p-2.5 border-b border-zinc-800">
-                  <div className="font-semibold text-zinc-100">Researcher Profile</div>
-                  <div className="text-[11px] text-zinc-400 font-mono truncate">
-                    Academic Research Lab
+                  <div className="flex items-center gap-2.5 mb-2">
+                    {currentUser?.photoURL ? (
+                      <img
+                        src={currentUser.photoURL}
+                        alt={currentUser.displayName || 'User'}
+                        className="w-9 h-9 rounded-full object-cover border border-zinc-700 shrink-0"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <div className="w-9 h-9 rounded-full bg-accent-600/30 text-accent-300 font-semibold flex items-center justify-center text-xs border border-accent-500/40 shrink-0">
+                        {userInitials}
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="font-semibold text-zinc-100 truncate" title={currentUser?.displayName || 'Researcher'}>
+                        {currentUser?.displayName || 'Researcher'}
+                      </div>
+                      <div className="text-[11px] text-zinc-400 font-mono truncate" title={currentUser?.email || undefined}>
+                        {currentUser?.email || 'Academic Researcher'}
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-[10px] text-accent-400 mt-1 flex items-center gap-1 font-mono">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
-                    Local Workspace Active
+                  <div className="text-[10px] text-emerald-400 flex items-center gap-1 font-mono">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse" />
+                    Google Account Verified
                   </div>
                 </div>
 
@@ -183,20 +204,19 @@ export const Header: React.FC<HeaderProps> = ({
                     className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors text-left"
                   >
                     <Settings className="w-3.5 h-3.5 text-zinc-500" />
-                    <span>Workspace Settings</span>
+                    <span>Settings</span>
                   </button>
                 </div>
 
+                {/* Sign Out Action */}
                 <div className="pt-1 border-t border-zinc-800">
                   <button
-                    onClick={() => {
-                      setProfileDropdownOpen(false);
-                      showToast('Workspace cache synchronized (12 papers)', 'success');
-                    }}
-                    className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors text-left text-[11px]"
+                    id="header-signout-button"
+                    onClick={handleSignOut}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 transition-colors text-left text-xs font-medium cursor-pointer"
                   >
-                    <span>Sync Workspace</span>
-                    <Check className="w-3 h-3 text-emerald-400" />
+                    <LogOut className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Sign out</span>
                   </button>
                 </div>
               </div>

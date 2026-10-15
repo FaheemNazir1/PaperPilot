@@ -1,254 +1,244 @@
 import React, { useState } from 'react';
-import { Upload, CheckCircle2, Sparkles, ArrowRight, Loader2, RefreshCw } from 'lucide-react';
-import { DropZone } from '../components/upload/DropZone';
-import { UploadQueueItem } from '../components/upload/UploadQueueItem';
-import { Button } from '../components/common/Button';
-import { Card } from '../components/common/Card';
-import { EmptyState } from '../components/common/EmptyState';
-import { UploadItem } from '../types';
 import { useNavigate } from 'react-router-dom';
+import { AlertCircle, CheckCircle2, FileText, Upload, X } from 'lucide-react';
+import { DropZone } from '../components/upload/DropZone';
+import { Button } from '../components/common/Button';
+import { Badge } from '../components/common/Badge';
+import { api, MAX_UPLOAD_MB } from '../lib/api';
+import { useLibrary } from '../contexts/LibraryContext';
 import { useToast } from '../context/ToastContext';
+import { formatBytes, formatDate, formatFileSize } from '../lib/utils';
+import { Paper } from '../types';
+
+interface SelectedFile {
+  key: string;
+  file: File;
+  /** Set when the server rejected this file; the file stays listed so it can be retried or removed. */
+  error?: string;
+}
+
+interface RejectedFile {
+  name: string;
+  reason: string;
+}
+
+const MAX_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
+
+const fileKey = (f: File) => `${f.name}:${f.size}:${f.lastModified}`;
 
 export const UploadPage: React.FC = () => {
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { refresh } = useLibrary();
 
-  const [queue, setQueue] = useState<UploadItem[]>([
-    {
-      id: 'file-01',
-      name: 'Deep_Learning_Multimodal_Stress_Detection.pdf',
-      size: '3.4 MB',
-      progress: 100,
-      status: 'ready',
-      pages: 12
-    },
-    {
-      id: 'file-02',
-      name: 'Survey_Large_Language_Models_Scientific_Research.pdf',
-      size: '5.1 MB',
-      progress: 100,
-      status: 'ready',
-      pages: 28
-    },
-    {
-      id: 'file-03',
-      name: 'Retrieval_Augmented_Generation_NLP_Tasks.pdf',
-      size: '2.8 MB',
-      progress: 100,
-      status: 'ready',
-      pages: 14
-    },
-    {
-      id: 'file-04',
-      name: 'Transformer_Scientific_Document_Summarization.pdf',
-      size: '4.2 MB',
-      progress: 100,
-      status: 'ready',
-      pages: 16
-    }
-  ]);
-
-  const [processingStage, setProcessingStage] = useState<string | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisComplete, setAnalysisComplete] = useState(false);
+  const [selected, setSelected] = useState<SelectedFile[]>([]);
+  const [rejected, setRejected] = useState<RejectedFile[]>([]);
+  const [uploaded, setUploaded] = useState<Paper[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [requestError, setRequestError] = useState<string | null>(null);
 
   const handleFilesSelected = (files: File[]) => {
-    const newItems: UploadItem[] = files.map((file, idx) => ({
-      id: `upload-${Date.now()}-${idx}`,
-      name: file.name,
-      size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
-      progress: 30,
-      status: 'queued',
-      pages: Math.floor(Math.random() * 12) + 8
-    }));
-    setQueue((prev) => [...newItems, ...prev]);
-    showToast(`${files.length} paper(s) added to upload queue`, 'info');
+    const accepted: SelectedFile[] = [];
+    const problems: RejectedFile[] = [];
+    const known = new Set(selected.map((s) => s.key));
+
+    for (const file of files) {
+      const key = fileKey(file);
+      const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+      if (!isPdf) problems.push({ name: file.name, reason: 'Only PDF files are supported.' });
+      else if (file.size === 0) problems.push({ name: file.name, reason: 'The file is empty.' });
+      else if (file.size > MAX_BYTES)
+        problems.push({ name: file.name, reason: `Larger than the ${MAX_UPLOAD_MB} MB limit (${formatFileSize(file.size)}).` });
+      else if (!known.has(key)) {
+        known.add(key);
+        accepted.push({ key, file });
+      }
+    }
+
+    setRejected(problems);
+    setRequestError(null);
+    if (accepted.length > 0) setSelected((prev) => [...prev, ...accepted]);
   };
 
-  const handleRemove = (id: string) => {
-    setQueue((prev) => prev.filter((item) => item.id !== id));
-    showToast('File removed from queue', 'info');
+  const handleRemove = (key: string) => {
+    setSelected((prev) => prev.filter((s) => s.key !== key));
   };
 
-  // Frontend-only simulated processing sequence
-  const handleAnalyzePapers = () => {
-    setIsAnalyzing(true);
-    setAnalysisComplete(false);
+  const handleUpload = async () => {
+    if (selected.length === 0 || isUploading) return;
+    setIsUploading(true);
+    setRequestError(null);
+    setRejected([]);
 
-    // Stage 1: Uploading
-    setProcessingStage('Uploading papers...');
-    setQueue((prev) =>
-      prev.map((item) => ({ ...item, status: 'uploading', progress: 45 }))
-    );
+    const batch = selected;
+    try {
+      const { items, papers } = await api.uploadPapers(batch.map((s) => s.file));
 
-    setTimeout(() => {
-      // Stage 2: Extracting text
-      setProcessingStage('Extracting text & mathematical notation...');
-      setQueue((prev) =>
-        prev.map((item) => ({ ...item, status: 'extracting', progress: 70 }))
-      );
+      // The server reports one item per file, in the order they were sent.
+      const failed: SelectedFile[] = [];
+      batch.forEach((entry, i) => {
+        const item = items[i];
+        if (!item || item.status !== 'uploaded') {
+          failed.push({ ...entry, error: item?.error || 'This file was not uploaded.' });
+        }
+      });
 
-      setTimeout(() => {
-        // Stage 3: Analyzing papers
-        setProcessingStage('Analyzing paper methodologies & findings...');
-        setQueue((prev) =>
-          prev.map((item) => ({ ...item, status: 'analyzing', progress: 85 }))
-        );
+      const okCount = batch.length - failed.length;
+      // Refresh first so the sidebar/dashboard counts already include the new papers when the result appears.
+      if (okCount > 0) await refresh();
+      setSelected(failed);
+      setUploaded((prev) => [...prev, ...papers]);
 
-        setTimeout(() => {
-          // Stage 4: Building research index
-          setProcessingStage('Building semantic research index...');
-          setQueue((prev) =>
-            prev.map((item) => ({ ...item, status: 'indexed', progress: 95 }))
-          );
-
-          setTimeout(() => {
-            // Stage 5: Ready
-            setProcessingStage(null);
-            setIsAnalyzing(false);
-            setAnalysisComplete(true);
-            setQueue((prev) =>
-              prev.map((item) => ({ ...item, status: 'ready', progress: 100 }))
-            );
-            showToast('12 papers are ready for research.', 'success', 4000);
-          }, 900);
-        }, 900);
-      }, 900);
-    }, 800);
+      if (okCount > 0) {
+        showToast(okCount === 1 ? 'Paper uploaded' : `${okCount} papers uploaded`, 'success');
+      }
+      if (failed.length > 0) {
+        showToast(`${failed.length} file${failed.length === 1 ? '' : 's'} could not be uploaded`, 'error');
+      }
+    } catch (err) {
+      setRequestError(err instanceof Error ? err.message : 'Upload failed. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
   };
+
+  const hasFailures = selected.some((s) => s.error);
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-200">
-      {/* Page Title & Subtitle */}
-      <div className="border-b border-zinc-800/80 pb-5">
-        <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white flex items-center gap-2.5">
-          <Upload className="w-5 h-5 text-accent-400" />
-          <span>Upload Research Papers</span>
-        </h1>
-        <p className="text-xs text-zinc-400 mt-1">
-          Add multiple scientific papers to your research workspace.
+    <div className="max-w-3xl mx-auto space-y-6 animate-in fade-in duration-200">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight text-zinc-100">Upload Research Papers</h1>
+        <p className="text-sm text-zinc-400 mt-1">
+          Add PDFs to your private library. Uploaded papers are stored as-is; analysis features are not available yet.
         </p>
       </div>
 
-      {/* Large Drag & Drop Upload Zone */}
-      <DropZone onFilesSelected={handleFilesSelected} />
+      <DropZone onFilesSelected={handleFilesSelected} maxSizeMb={MAX_UPLOAD_MB} disabled={isUploading} />
 
-      {/* Uploaded Queue Section */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm font-semibold text-zinc-200">
-              Uploaded Papers Queue ({queue.length})
-            </h3>
-            <span className="text-[11px] font-mono text-zinc-400">
-              PDF Ingestion Pipeline
-            </span>
-          </div>
-
-          {queue.length > 0 && !isAnalyzing && (
-            <button
-              onClick={() => {
-                setQueue([]);
-                showToast('Upload queue cleared', 'info');
-              }}
-              className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
-            >
-              Clear Queue
-            </button>
-          )}
-        </div>
-
-        {queue.length === 0 ? (
-          <EmptyState
-            icon={Upload}
-            title="No papers in upload queue"
-            description="Drag and drop your PDF papers into the zone above or browse from your device."
-          />
-        ) : (
-          <div className="space-y-2.5">
-            {queue.map((item) => (
-              <UploadQueueItem
-                key={item.id}
-                item={item}
-                onRemove={handleRemove}
-              />
+      {/* Files the browser-side checks refused */}
+      {rejected.length > 0 && (
+        <div role="alert" className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200 space-y-1">
+          <div className="font-medium">Some files were not added</div>
+          <ul className="text-xs text-amber-200/90 space-y-0.5">
+            {rejected.map((r, i) => (
+              <li key={`${r.name}-${i}`}>
+                <span className="font-medium">{r.name}</span> — {r.reason}
+              </li>
             ))}
-          </div>
-        )}
+          </ul>
+        </div>
+      )}
 
-        {/* Processing State Feedback Banner */}
-        {isAnalyzing && (
-          <div className="p-4 rounded-xl bg-accent-950/20 border border-accent-500/30 flex items-center gap-3 animate-in fade-in duration-150">
-            <Loader2 className="w-5 h-5 animate-spin text-accent-400 shrink-0" />
-            <div>
-              <div className="text-xs font-semibold text-accent-300">
-                {processingStage}
-              </div>
-              <div className="text-[11px] text-zinc-400 mt-0.5 font-mono">
-                Extracting sections, references, datasets, and semantic vector embeddings
-              </div>
-            </div>
-          </div>
-        )}
+      {/* Selected files */}
+      {selected.length > 0 && (
+        <section aria-label="Selected files" className="space-y-3">
+          <h2 className="text-sm font-medium text-zinc-300">
+            {selected.length} file{selected.length === 1 ? '' : 's'} selected
+          </h2>
+          <ul className="divide-y divide-zinc-800/80 rounded-xl border border-zinc-800 bg-zinc-900/40">
+            {selected.map((s) => (
+              <li key={s.key} className="flex items-start gap-3 px-4 py-3">
+                <FileText className="w-4 h-4 mt-0.5 text-zinc-500 shrink-0" aria-hidden="true" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm text-zinc-200 truncate" title={s.file.name}>
+                    {s.file.name}
+                  </div>
+                  <div className="text-xs text-zinc-500">{formatBytes(s.file.size)}</div>
+                  {s.error && (
+                    <div className="mt-1 flex items-center gap-1.5 text-xs text-rose-300">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                      <span>{s.error}</span>
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleRemove(s.key)}
+                  disabled={isUploading}
+                  aria-label={`Remove ${s.file.name}`}
+                  className="p-1 rounded text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 disabled:opacity-40 disabled:pointer-events-none"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </li>
+            ))}
+          </ul>
 
-        {/* Analysis Complete Banner */}
-        {analysisComplete && (
-          <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/30 flex items-center justify-between gap-4 animate-in fade-in duration-150">
-            <div className="flex items-center gap-3">
-              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+          {requestError && (
+            <div role="alert" className="flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-200">
+              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
               <div>
-                <div className="text-xs font-semibold text-emerald-300">
-                  12 papers are ready for research.
-                </div>
-                <div className="text-[11px] text-zinc-400 font-mono">
-                  Full text, figures, equations, and references indexed for RAG
-                </div>
+                <div className="font-medium">Upload failed</div>
+                <div className="text-xs text-rose-200/90">{requestError}</div>
+                <div className="text-xs text-rose-200/70 mt-0.5">Your selection is kept — you can try again.</div>
               </div>
             </div>
+          )}
 
-            <Button
-              variant="primary"
-              size="sm"
-              rightIcon={<ArrowRight className="w-3.5 h-3.5" />}
-              onClick={() => navigate('/papers')}
-            >
-              Open Library
-            </Button>
-          </div>
-        )}
-
-        {/* Primary Action Button Bar */}
-        <div className="pt-4 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-zinc-800/80">
-          <div className="text-xs text-zinc-400 flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-accent-400" />
-            <span>
-              {queue.filter((q) => q.status === 'ready' || q.status === 'indexed').length} of {queue.length} files parsed & ready
-            </span>
-          </div>
-
-          <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="flex items-center justify-end gap-3">
+            {isUploading && (
+              <span role="status" className="text-xs text-zinc-400">
+                Uploading {selected.length} file{selected.length === 1 ? '' : 's'}…
+              </span>
+            )}
             <Button
               variant="primary"
               size="md"
-              isLoading={isAnalyzing}
-              disabled={queue.length === 0}
-              className="w-full sm:w-auto"
-              leftIcon={<Sparkles className="w-4 h-4" />}
-              onClick={handleAnalyzePapers}
+              isLoading={isUploading}
+              leftIcon={<Upload className="w-4 h-4" />}
+              onClick={handleUpload}
             >
-              {isAnalyzing ? 'Analyzing Papers...' : 'Analyze Papers'}
+              {isUploading ? 'Uploading' : requestError || hasFailures ? 'Retry upload' : `Upload ${selected.length === 1 ? 'paper' : `${selected.length} papers`}`}
             </Button>
           </div>
-        </div>
+        </section>
+      )}
 
-        {/* Info card on future pipeline */}
-        <Card className="p-4 bg-zinc-900/40 border border-zinc-800/80 text-xs text-zinc-400 flex items-start gap-3">
-          <Sparkles className="w-4 h-4 text-accent-400 shrink-0 mt-0.5" />
-          <div className="leading-relaxed font-sans">
-            <strong className="text-zinc-200">How PaperPilot Ingests Literature:</strong> Incoming PDFs are converted into structured markdown representations, mathematical formulas and figures are extracted with bounding boxes, and dense vector embeddings are indexed for semantic retrieval and cross-paper synthesis.
+      {/* Success: only what actually happened — the file is stored, nothing more */}
+      {uploaded.length > 0 && (
+        <section aria-label="Upload results" className="space-y-3">
+          {uploaded.map((paper) => (
+            <div key={paper.id} className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
+              <div className="flex items-center gap-2 text-sm font-medium text-emerald-300">
+                <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
+                Paper uploaded successfully
+              </div>
+              <dl className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                <div className="sm:col-span-2 min-w-0">
+                  <dt className="text-xs text-zinc-500">Filename</dt>
+                  <dd className="text-zinc-200 truncate" title={paper.originalFilename || paper.title}>
+                    {paper.originalFilename || paper.title}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-zinc-500">File size</dt>
+                  <dd className="text-zinc-200">{formatBytes(paper.sizeBytes)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-zinc-500">Uploaded</dt>
+                  <dd className="text-zinc-200">{paper.uploadedAt ? formatDate(paper.uploadedAt) : '—'}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-zinc-500">Status</dt>
+                  <dd>
+                    <Badge variant="neutral">Uploaded — not yet analyzed</Badge>
+                  </dd>
+                </div>
+              </dl>
+              <div className="mt-4 flex justify-end">
+                <Button variant="outline" size="sm" onClick={() => navigate(`/papers?paper=${encodeURIComponent(paper.id)}`)}>
+                  View Paper
+                </Button>
+              </div>
+            </div>
+          ))}
+          <div className="flex justify-end">
+            <Button variant="ghost" size="sm" onClick={() => navigate('/papers')}>
+              Go to My Papers
+            </Button>
           </div>
-        </Card>
-      </div>
+        </section>
+      )}
     </div>
   );
 };

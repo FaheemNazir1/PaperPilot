@@ -4,6 +4,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from datetime import datetime, timezone
+
 DB_PATH = Path(__file__).resolve().parent.parent / "paperpilot.db"
 
 
@@ -16,13 +18,28 @@ def get_db_connection() -> sqlite3.Connection:
 
 
 def init_db() -> None:
-    """Creates database schema for papers and structured sections."""
+    """Creates database schema for users, papers, and structured sections."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with get_db_connection() as conn:
         conn.executescript(
             """
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                firebase_uid TEXT UNIQUE NOT NULL,
+                name TEXT,
+                email TEXT,
+                profile_picture TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_users_firebase_uid ON users(firebase_uid);
+            CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+
             CREATE TABLE IF NOT EXISTS papers (
                 id TEXT PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                is_demo INTEGER DEFAULT 0,
                 title TEXT NOT NULL,
                 authors TEXT,
                 year INTEGER DEFAULT 2024,
@@ -44,9 +61,15 @@ def init_db() -> None:
                 added_at TEXT,
                 original_text TEXT DEFAULT '',
                 cleaned_text TEXT DEFAULT '',
-                file_path TEXT
+                file_path TEXT,
+                original_filename TEXT,
+                size_bytes INTEGER,
+                page_count INTEGER,
+                uploaded_at TEXT
             );
 
+            CREATE INDEX IF NOT EXISTS idx_papers_user_id ON papers(user_id);
+            CREATE INDEX IF NOT EXISTS idx_papers_is_demo ON papers(is_demo);
             CREATE INDEX IF NOT EXISTS idx_papers_title ON papers(title);
             CREATE INDEX IF NOT EXISTS idx_papers_category ON papers(category);
 
@@ -66,13 +89,96 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_sections_type ON paper_sections(section_type);
         """
         )
+        _add_missing_paper_columns(conn)
         conn.commit()
 
 
-def save_paper(paper_data: Dict[str, Any], sections: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Inserts or replaces a paper along with its structured sections."""
+# Columns added after the first release; applied in place so existing databases
+# (and the rows in them) are preserved.
+_UPLOAD_COLUMNS = {
+    "original_filename": "TEXT",
+    "size_bytes": "INTEGER",
+    "page_count": "INTEGER",
+    "uploaded_at": "TEXT",
+}
+
+
+def _add_missing_paper_columns(conn: sqlite3.Connection) -> None:
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(papers)")}
+    for column, col_type in _UPLOAD_COLUMNS.items():
+        if column not in existing:
+            conn.execute(f"ALTER TABLE papers ADD COLUMN {column} {col_type}")
+
+
+# ==========================================
+# User Management Helpers
+# ==========================================
+
+def get_or_create_user(
+    firebase_uid: str,
+    name: Optional[str] = None,
+    email: Optional[str] = None,
+    profile_picture: Optional[str] = None
+) -> Dict[str, Any]:
+    """Finds an existing user by Firebase UID, or creates a new application user."""
+    now = datetime.now(timezone.utc).isoformat()
     with get_db_connection() as conn:
-        # Convert lists to JSON strings for storage
+        row = conn.execute("SELECT * FROM users WHERE firebase_uid = ?", (firebase_uid,)).fetchone()
+        if row:
+            # Update user profile if newer information is provided
+            conn.execute(
+                """
+                UPDATE users
+                SET name = COALESCE(?, name),
+                    email = COALESCE(?, email),
+                    profile_picture = COALESCE(?, profile_picture),
+                    updated_at = ?
+                WHERE firebase_uid = ?
+                """,
+                (name, email, profile_picture, now, firebase_uid)
+            )
+            conn.commit()
+            updated_row = conn.execute("SELECT * FROM users WHERE firebase_uid = ?", (firebase_uid,)).fetchone()
+            return dict(updated_row)
+
+        cursor = conn.execute(
+            """
+            INSERT INTO users (firebase_uid, name, email, profile_picture, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (firebase_uid, name or "Researcher", email or "", profile_picture or "", now, now)
+        )
+        conn.commit()
+        new_row = conn.execute("SELECT * FROM users WHERE id = ?", (cursor.lastrowid,)).fetchone()
+        return dict(new_row)
+
+
+def get_user_by_firebase_uid(firebase_uid: str) -> Optional[Dict[str, Any]]:
+    with get_db_connection() as conn:
+        row = conn.execute("SELECT * FROM users WHERE firebase_uid = ?", (firebase_uid,)).fetchone()
+        return dict(row) if row else None
+
+
+def get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
+    with get_db_connection() as conn:
+        row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        return dict(row) if row else None
+
+
+# ==========================================
+# Paper Management & Ownership
+# ==========================================
+
+def save_paper(
+    paper_data: Dict[str, Any],
+    sections: List[Dict[str, Any]],
+    user_id: Optional[int] = None,
+    is_demo: Optional[bool] = None
+) -> Dict[str, Any]:
+    """Inserts or replaces a paper along with its structured sections and ownership."""
+    demo_flag = 1 if (is_demo if is_demo is not None else (user_id is None)) else 0
+
+    with get_db_connection() as conn:
         authors_json = json.dumps(paper_data.get("authors", []))
         tags_json = json.dumps(paper_data.get("tags", []))
         findings_json = json.dumps(paper_data.get("keyFindings", []))
@@ -81,14 +187,17 @@ def save_paper(paper_data: Dict[str, Any], sections: List[Dict[str, Any]]) -> Di
         conn.execute(
             """
             INSERT OR REPLACE INTO papers (
-                id, title, authors, year, venue, doi, category, research_area,
+                id, user_id, is_demo, title, authors, year, venue, doi, category, research_area,
                 tags, abstract, summary, methodology, key_findings, limitations,
                 dataset, model, status, citations_count, pdf_size, added_at,
-                original_text, cleaned_text, file_path
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                original_text, cleaned_text, file_path,
+                original_filename, size_bytes, page_count, uploaded_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 paper_data["id"],
+                user_id,
+                demo_flag,
                 paper_data.get("title", "Untitled Document"),
                 authors_json,
                 paper_data.get("year", 2024),
@@ -104,13 +213,17 @@ def save_paper(paper_data: Dict[str, Any], sections: List[Dict[str, Any]]) -> Di
                 limitations_json,
                 paper_data.get("dataset", "N/A"),
                 paper_data.get("model", "N/A"),
-                paper_data.get("status", "Indexed"),
+                paper_data.get("status", "Uploaded"),
                 paper_data.get("citationsCount", 0),
                 paper_data.get("pdfSize", "0 MB"),
                 paper_data.get("addedAt", ""),
                 paper_data.get("original_text", ""),
                 paper_data.get("cleaned_text", ""),
                 paper_data.get("file_path", ""),
+                paper_data.get("originalFilename"),
+                paper_data.get("sizeBytes"),
+                paper_data.get("pageCount"),
+                paper_data.get("uploadedAt"),
             ),
         )
 
@@ -139,13 +252,36 @@ def save_paper(paper_data: Dict[str, Any], sections: List[Dict[str, Any]]) -> Di
 
         conn.commit()
 
-    return get_paper(paper_data["id"])  # type: ignore
+    return get_paper(paper_data["id"], user_id=user_id)  # type: ignore
+
+
+def _fetch_sections_by_paper_id(paper_id: str) -> List[Dict[str, Any]]:
+    """Fetches raw structured sections for a paper from the database."""
+    with get_db_connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM paper_sections WHERE paper_id = ? ORDER BY order_index ASC",
+            (paper_id,),
+        ).fetchall()
+        return [
+            {
+                "id": r["id"],
+                "paper_id": r["paper_id"],
+                "section_type": r["section_type"],
+                "heading": r["heading"],
+                "content": r["content"],
+                "page_start": r["page_start"],
+                "page_end": r["page_end"],
+            }
+            for r in rows
+        ]
 
 
 def _row_to_paper_dict(row: sqlite3.Row, include_sections: bool = False) -> Dict[str, Any]:
     data = dict(row)
     paper = {
         "id": data["id"],
+        "userId": data.get("user_id"),
+        "is_demo": bool(data.get("is_demo", 0)),
         "title": data["title"],
         "authors": json.loads(data["authors"]) if data.get("authors") else [],
         "year": data["year"],
@@ -167,71 +303,141 @@ def _row_to_paper_dict(row: sqlite3.Row, include_sections: bool = False) -> Dict
         "addedAt": data["added_at"],
         "original_text": data.get("original_text", ""),
         "cleaned_text": data.get("cleaned_text", ""),
+        "originalFilename": data.get("original_filename"),
+        "sizeBytes": data.get("size_bytes"),
+        "pageCount": data.get("page_count"),
+        "uploadedAt": data.get("uploaded_at"),
     }
 
     if include_sections:
-        paper["sections"] = get_paper_sections(data["id"])
+        paper["sections"] = _fetch_sections_by_paper_id(data["id"])
 
     return paper
 
 
-def get_all_papers(search: Optional[str] = None, category: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Fetches all papers from database, with optional keyword or category filtering."""
-    query = "SELECT * FROM papers WHERE 1=1"
+def get_all_papers(
+    user_id: Optional[int] = None,
+    include_demo: bool = False,
+    search: Optional[str] = None,
+    category: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Fetches papers with strict user ownership isolation.
+    - If user_id is provided and include_demo is False: returns only papers owned by that user.
+    - If user_id is provided and include_demo is True: returns user's papers + public demo papers.
+    - If user_id is None: returns only public demo benchmark papers.
+    """
     params: List[Any] = []
 
+    if user_id is not None:
+        if include_demo:
+            where_clauses = ["(user_id = ? OR is_demo = 1)"]
+            params.append(user_id)
+        else:
+            where_clauses = ["user_id = ? AND (is_demo = 0 OR is_demo IS NULL)"]
+            params.append(user_id)
+    else:
+        where_clauses = ["is_demo = 1"]
+
     if category and category != "All":
-        query += " AND category = ?"
+        where_clauses.append("category = ?")
         params.append(category)
 
     if search:
-        query += " AND (title LIKE ? OR abstract LIKE ? OR authors LIKE ?)"
+        where_clauses.append("(title LIKE ? OR abstract LIKE ? OR authors LIKE ?)")
         term = f"%{search}%"
         params.extend([term, term, term])
 
-    query += " ORDER BY id ASC"
+    query = f"SELECT * FROM papers WHERE {' AND '.join(where_clauses)} ORDER BY is_demo ASC, id ASC"
 
     with get_db_connection() as conn:
         rows = conn.execute(query, params).fetchall()
         return [_row_to_paper_dict(r) for r in rows]
 
 
-def get_paper(paper_id: str) -> Optional[Dict[str, Any]]:
-    """Fetches a single paper by ID including full sections."""
+def get_paper(
+    paper_id: str,
+    user_id: Optional[int] = None,
+    include_sections: bool = True
+) -> Optional[Dict[str, Any]]:
+    """
+    Fetches a single paper by ID enforcing ownership security.
+    Returns paper only if:
+    - It is a public demo paper (is_demo = 1), OR
+    - It belongs to the authenticated user (user_id == paper.user_id).
+    Otherwise returns None (preventing existence leak).
+    """
     with get_db_connection() as conn:
         row = conn.execute("SELECT * FROM papers WHERE id = ?", (paper_id,)).fetchone()
         if not row:
             return None
-        return _row_to_paper_dict(row, include_sections=True)
+
+        # Check access permission
+        is_demo = bool(row["is_demo"])
+        paper_user_id = row["user_id"]
+
+        if is_demo:
+            return _row_to_paper_dict(row, include_sections=include_sections)
+
+        if user_id is not None and paper_user_id == user_id:
+            return _row_to_paper_dict(row, include_sections=include_sections)
+
+        # Access denied -> return None (results in 404)
+        return None
 
 
-def get_paper_sections(paper_id: str) -> List[Dict[str, Any]]:
-    """Fetches structured sections for a paper."""
+def get_paper_sections(paper_id: str, user_id: Optional[int] = None) -> List[Dict[str, Any]]:
+    """Fetches structured sections for a paper with ownership check."""
+    paper = get_paper(paper_id, user_id=user_id, include_sections=False)
+    if not paper:
+        return []
+    return _fetch_sections_by_paper_id(paper_id)
+
+
+def delete_paper(paper_id: str, user_id: Optional[int] = None) -> bool:
+    """
+    Deletes paper and cascade-deletes its sections.
+    Only allows deletion if the paper belongs to user_id and is not a demo paper.
+    """
+    if user_id is None:
+        return False
+
     with get_db_connection() as conn:
-        rows = conn.execute(
-            "SELECT * FROM paper_sections WHERE paper_id = ? ORDER BY order_index ASC",
-            (paper_id,),
-        ).fetchall()
-        return [
-            {
-                "id": r["id"],
-                "paper_id": r["paper_id"],
-                "section_type": r["section_type"],
-                "heading": r["heading"],
-                "content": r["content"],
-                "page_start": r["page_start"],
-                "page_end": r["page_end"],
-            }
-            for r in rows
-        ]
-
-
-def delete_paper(paper_id: str) -> bool:
-    """Deletes paper and cascade-deletes its sections."""
-    with get_db_connection() as conn:
-        cursor = conn.execute("DELETE FROM papers WHERE id = ?", (paper_id,))
+        cursor = conn.execute(
+            "DELETE FROM papers WHERE id = ? AND user_id = ? AND (is_demo = 0 OR is_demo IS NULL)",
+            (paper_id, user_id),
+        )
         conn.commit()
         return cursor.rowcount > 0
+
+
+def get_owned_file_path(paper_id: str, user_id: int) -> Optional[str]:
+    """Returns the stored PDF path for a paper owned by user_id (never for demo papers)."""
+    with get_db_connection() as conn:
+        row = conn.execute(
+            "SELECT file_path FROM papers WHERE id = ? AND user_id = ? AND (is_demo = 0 OR is_demo IS NULL)",
+            (paper_id, user_id),
+        ).fetchone()
+        return row["file_path"] if row and row["file_path"] else None
+
+
+def get_user_stats(user_id: Optional[int] = None) -> Dict[str, Any]:
+    """
+    Real library counts straight from the database.
+    - personalPapers: papers owned by user_id (always 0 when unauthenticated).
+    - demoPapers: public benchmark papers, reported separately and never added to personal counts.
+    """
+    with get_db_connection() as conn:
+        if user_id is not None:
+            personal = conn.execute(
+                "SELECT COUNT(*) FROM papers WHERE user_id = ? AND (is_demo = 0 OR is_demo IS NULL)",
+                (user_id,),
+            ).fetchone()[0]
+        else:
+            personal = 0
+        demo = conn.execute("SELECT COUNT(*) FROM papers WHERE is_demo = 1").fetchone()[0]
+
+    return {"personalPapers": personal, "demoPapers": demo}
 
 
 def seed_default_papers() -> None:
@@ -537,4 +743,5 @@ def seed_default_papers() -> None:
     for p in initial_papers:
         if not get_paper(p["id"]):
             sections = p.pop("sections", [])
-            save_paper(p, sections)
+            save_paper(p, sections, user_id=None, is_demo=True)
+

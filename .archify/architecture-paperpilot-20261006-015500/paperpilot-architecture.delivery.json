@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "ea13c572-60b5-4fd0-96ad-2e14c78c95da",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "D:\\Project\\PaperPilot\\.archify\\architecture-paperpilot-20261006-015500\\candidate.json",
+  "output": "D:\\Project\\PaperPilot\\.archify\\architecture-paperpilot-20261006-015500\\paperpilot-architecture.html",
+  "specification": {
+    "sha256": "6ab14288292a1cc12cb0d4435d78ade6562bca1fe6e0f336ed4b97a54c07b73e",
+    "bytes": 12845
+  },
+  "artifact": {
+    "sha256": "7bf8da9aff72d00578ea18c2230ff1b5a95f6a65ec5c0b81fb7a9a88dcf01de3",
+    "bytes": 799434
+  }
+}

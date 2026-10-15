@@ -1,143 +1,128 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { BookOpen, Plus, Sparkles, CheckCircle2 } from 'lucide-react';
+import React from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { AlertCircle, ArrowRight, FileText, Plus } from 'lucide-react';
+import { Badge } from '../components/common/Badge';
 import { Button } from '../components/common/Button';
-import { WorkflowSteps } from '../components/dashboard/WorkflowSteps';
-import { HeroUploadArea } from '../components/dashboard/HeroUploadArea';
-import { CompactPaperList } from '../components/dashboard/CompactPaperList';
-import { ContinueReviewCard } from '../components/dashboard/ContinueReviewCard';
-import { QuickActionsBar } from '../components/dashboard/QuickActionsBar';
-import { PaperDetailsModal } from '../components/papers/PaperDetailsModal';
-import { PaperSummaryModal } from '../components/papers/PaperSummaryModal';
-import { api } from '../lib/api';
-import { Paper, LiteratureReview } from '../types';
+import { PaperCardSkeleton } from '../components/common/Skeleton';
+import { useLibrary } from '../contexts/LibraryContext';
+import { formatBytes, formatDate } from '../lib/utils';
+
+const RECENT_LIMIT = 5;
+
+const PLANNED = ['Compare papers', 'Find research gaps', 'Generate a literature review'];
 
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
-  const [papers, setPapers] = useState<Paper[]>([]);
-  const [reviews, setReviews] = useState<LiteratureReview[]>([]);
-  const [selectedPaper, setSelectedPaper] = useState<Paper | null>(null);
-  const [summaryPaper, setSummaryPaper] = useState<Paper | null>(null);
+  const { papers, count, status, error, refresh } = useLibrary();
 
-  useEffect(() => {
-    async function loadData() {
-      const [papersData, reviewsData] = await Promise.all([
-        api.getPapers(),
-        api.getReviews(),
-      ]);
-      setPapers(papersData);
-      setReviews(reviewsData);
-    }
-    loadData();
-  }, []);
-
-  const latestReview = reviews.length > 0 ? reviews[0] : null;
+  const recent = [...papers]
+    .sort((a, b) => (b.uploadedAt ?? '').localeCompare(a.uploadedAt ?? ''))
+    .slice(0, RECENT_LIMIT);
+  const isEmpty = status === 'ready' && papers.length === 0;
 
   return (
-    <div className="space-y-7 max-w-6xl mx-auto animate-in fade-in duration-200">
-      {/* 1. Header Section */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-6 border-b border-zinc-800/80">
-        <div className="space-y-1.5 max-w-2xl">
-          <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-zinc-900 border border-zinc-800 text-[11px] font-mono text-zinc-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-accent-400 inline-block" />
-            <span>PaperPilot · AI Copilot for Scientific Literature Reviews</span>
-          </div>
-
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-100">
-            Turn research papers into literature reviews.
-          </h1>
-
-          <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed font-sans">
-            Upload multiple scientific papers and let PaperPilot extract, compare, synthesize, and organize the research for you.
-          </p>
+    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-200">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-zinc-100">Your Research Workspace</h1>
+          <p className="text-sm text-zinc-400 mt-1.5">Upload and organize scientific papers for your literature review.</p>
         </div>
-
-        <div className="flex items-center gap-2.5 shrink-0">
-          <Button
-            variant="outline"
-            size="md"
-            leftIcon={<BookOpen className="w-4 h-4 text-zinc-300" />}
-            onClick={() => navigate('/literature-review')}
-          >
-            Create Literature Review
+        {!isEmpty && (
+          <Button variant="primary" size="md" leftIcon={<Plus className="w-4 h-4" />} onClick={() => navigate('/upload')}>
+            Upload Research Papers
           </Button>
-
-          <Button
-            variant="primary"
-            size="md"
-            leftIcon={<Plus className="w-4 h-4" />}
-            onClick={() => navigate('/upload')}
-          >
-            + Upload Research Papers
-          </Button>
-        </div>
+        )}
       </div>
 
-      {/* 2. Core Workflow Step Indicator */}
-      <WorkflowSteps />
-
-      {/* 3. Hero / Primary Upload Action */}
-      <HeroUploadArea />
-
-      {/* 4. Main Two-Column Research Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column (2 cols wide): Recent Research Papers & Quick Actions */}
-        <div className="lg:col-span-2 space-y-6">
-          <CompactPaperList
-            papers={papers}
-            onOpenPaper={(paper) => setSelectedPaper(paper)}
-          />
-
-          <QuickActionsBar />
+      <section aria-labelledby="my-papers-heading" className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 id="my-papers-heading" className="text-sm font-medium text-zinc-200 flex items-center gap-2">
+            My Papers
+            {count !== null && <span className="text-xs text-zinc-500 tabular-nums">{count}</span>}
+          </h2>
+          {(count ?? 0) > 0 && (
+            <Link to="/papers" className="text-xs text-accent-400 hover:text-accent-300 inline-flex items-center gap-1">
+              View all <ArrowRight className="w-3 h-3" aria-hidden="true" />
+            </Link>
+          )}
         </div>
 
-        {/* Right Column (1 col wide): Continue Research & Synthesis Guide */}
-        <div className="space-y-4">
-          <ContinueReviewCard latestReview={latestReview} />
+        {status === 'loading' && (
+          <div className="space-y-3">
+            <PaperCardSkeleton />
+            <PaperCardSkeleton />
+          </div>
+        )}
 
-          {/* Academic Synthesis Purpose Callout */}
-          <div className="p-4 rounded-xl border border-zinc-850 bg-zinc-950/40 space-y-2.5">
-            <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400 font-medium flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-accent-400" />
-              Automated Synthesis
-            </span>
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              PaperPilot automates the manual effort of literature reviews:
+        {status === 'error' && (
+          <div role="alert" className="flex items-start justify-between gap-3 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4">
+            <div className="flex items-start gap-2.5 text-sm text-rose-200">
+              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
+              <div>
+                <div className="font-medium">Couldn’t load your papers</div>
+                <div className="text-xs text-rose-200/90 mt-0.5">{error}</div>
+              </div>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => void refresh()}>
+              Retry
+            </Button>
+          </div>
+        )}
+
+        {isEmpty && (
+          <div className="text-center py-14 rounded-xl border border-zinc-800 bg-zinc-900/30 space-y-3">
+            <div className="w-12 h-12 mx-auto rounded-xl bg-zinc-800/80 border border-zinc-700/60 flex items-center justify-center">
+              <FileText className="w-6 h-6 text-zinc-400" aria-hidden="true" />
+            </div>
+            <h3 className="text-base font-medium text-zinc-100">No papers yet</h3>
+            <p className="text-sm text-zinc-400 max-w-sm mx-auto">
+              Upload your first scientific paper to start building your research library.
             </p>
-            <ul className="space-y-1.5 text-[11px] text-zinc-300 font-sans">
-              <li className="flex items-start gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-accent-400 shrink-0 mt-0.5" />
-                <span>Extracts methodologies, datasets & key findings</span>
-              </li>
-              <li className="flex items-start gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-accent-400 shrink-0 mt-0.5" />
-                <span>Identifies contradictions & research gaps</span>
-              </li>
-              <li className="flex items-start gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-accent-400 shrink-0 mt-0.5" />
-                <span>Generates publication-ready IEEE/APA manuscripts</span>
-              </li>
-            </ul>
+            <Button variant="primary" size="md" leftIcon={<Plus className="w-4 h-4" />} onClick={() => navigate('/upload')}>
+              Upload Research Papers
+            </Button>
           </div>
-        </div>
-      </div>
+        )}
 
-      {/* Modals */}
-      <PaperDetailsModal
-        paper={selectedPaper}
-        isOpen={Boolean(selectedPaper)}
-        onClose={() => setSelectedPaper(null)}
-        onOpenSummary={(paper) => {
-          setSelectedPaper(null);
-          setSummaryPaper(paper);
-        }}
-      />
+        {status === 'ready' && recent.length > 0 && (
+          <ul className="divide-y divide-zinc-800/80 rounded-xl border border-zinc-800 bg-zinc-900/40">
+            {recent.map((paper) => (
+              <li key={paper.id} className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3.5">
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium text-zinc-100 truncate" title={paper.title}>
+                    {paper.title}
+                  </div>
+                  <div className="mt-0.5 text-xs text-zinc-500 flex flex-wrap items-center gap-x-2">
+                    <span>{paper.uploadedAt ? formatDate(paper.uploadedAt) : '—'}</span>
+                    <span aria-hidden="true">·</span>
+                    <span>{formatBytes(paper.sizeBytes)}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Badge variant="neutral">Uploaded</Badge>
+                  <Button variant="outline" size="sm" onClick={() => navigate(`/papers?paper=${encodeURIComponent(paper.id)}`)}>
+                    View
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
-      <PaperSummaryModal
-        paper={summaryPaper}
-        isOpen={Boolean(summaryPaper)}
-        onClose={() => setSummaryPaper(null)}
-      />
+      <section aria-labelledby="planned-heading" className="border-t border-zinc-800/80 pt-5">
+        <h2 id="planned-heading" className="text-xs font-medium text-zinc-500">
+          Planned workflow
+        </h2>
+        <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-1.5 text-sm text-zinc-500">
+          {PLANNED.map((item) => (
+            <li key={item} className="flex items-center gap-2">
+              {item}
+              <Badge variant="outline">Coming soon</Badge>
+            </li>
+          ))}
+        </ul>
+      </section>
     </div>
   );
 };

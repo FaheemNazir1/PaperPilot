@@ -29,6 +29,26 @@ class ExtractedBlock:
         }
 
 
+def read_basic_metadata(file_path: str) -> Dict[str, Any]:
+    """
+    Cheap, text-free read of a PDF's page count and embedded metadata.
+    Used at upload time; does not extract or analyse any page content.
+    Raises if the file cannot be opened as a PDF.
+    """
+    # Open from bytes so a malformed file never leaves an OS file handle behind
+    # (on Windows that would block deleting the rejected upload).
+    doc = pymupdf.open(stream=Path(file_path).read_bytes(), filetype="pdf")
+    try:
+        metadata = doc.metadata or {}
+        return {
+            "page_count": len(doc),
+            "meta_title": (metadata.get("title") or "").strip(),
+            "meta_author": (metadata.get("author") or "").strip(),
+        }
+    finally:
+        doc.close()
+
+
 def extract_pdf_content(file_path: str) -> Dict[str, Any]:
     """
     Extracts raw text, page-by-page text, and block-level typography metadata

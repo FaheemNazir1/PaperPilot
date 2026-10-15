@@ -38,12 +38,12 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
 
   const commands: CommandItem[] = [
     {
-      id: 'search-papers',
-      label: 'Search papers',
-      category: 'Research Tools',
+      id: 'my-papers',
+      label: 'My Papers',
+      category: 'Navigation',
       path: '/papers',
       icon: Search,
-      description: 'Search through 12 indexed scientific papers'
+      description: 'Browse and search the papers you have uploaded'
     },
     {
       id: 'upload-papers',
@@ -52,59 +52,59 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
       path: '/upload',
       icon: Upload,
       shortcut: 'U',
-      description: 'Ingest and extract new PDF documents'
+      description: 'Add PDF papers to your library'
     },
     {
       id: 'generate-review',
-      label: 'Generate literature review',
-      category: 'Actions',
+      label: 'Literature Review (coming soon)',
+      category: 'Research Tools',
       path: '/literature-review',
       icon: BookOpen,
       shortcut: 'R',
-      description: 'Create multi-paper structured synthesis with IEEE citations'
+      description: 'Not available yet'
     },
     {
       id: 'compare-papers',
-      label: 'Compare papers',
+      label: 'Compare Papers (coming soon)',
       category: 'Research Tools',
       path: '/compare',
       icon: GitCompare,
       shortcut: 'C',
-      description: 'Open side-by-side methodology & benchmark matrix'
+      description: 'Not available yet'
     },
     {
       id: 'ask-assistant',
-      label: 'Ask PaperPilot AI',
+      label: 'AI Assistant (under maintenance)',
       category: 'Research Tools',
       path: '/assistant',
       icon: Bot,
       shortcut: 'A',
-      description: 'Ask questions with citation-grounded answers'
+      description: 'Not available yet'
     },
     {
       id: 'view-gaps',
-      label: 'Explore research gaps',
+      label: 'Research Gaps (coming soon)',
       category: 'Research Tools',
       path: '/research-gaps',
       icon: Lightbulb,
-      description: 'View 2D Opportunity Map & unexplored thesis directions'
+      description: 'Not available yet'
     },
     {
       id: 'nav-dashboard',
-      label: 'Go to Dashboard',
+      label: 'Dashboard',
       category: 'Navigation',
       path: '/dashboard',
       icon: Sparkles,
-      description: 'View research overview & statistics'
+      description: 'Your research workspace'
     },
     {
       id: 'settings',
-      label: 'Workspace settings',
+      label: 'Settings',
       category: 'Navigation',
       path: '/settings',
       icon: Settings,
       shortcut: 'S',
-      description: 'Configure citation styles and local inference model'
+      description: 'Account and workspace preferences'
     }
   ];
 
@@ -171,7 +171,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
               setQuery(e.target.value);
               setSelectedIndex(0);
             }}
-            placeholder="Type a command or search workspace..."
+            placeholder="Jump to a page…"
             className="w-full bg-transparent text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none font-sans"
           />
           {query && (
@@ -191,7 +191,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
         <div className="max-h-80 overflow-y-auto custom-scrollbar p-2">
           {filteredCommands.length === 0 ? (
             <div className="p-6 text-center text-xs text-zinc-500">
-              No matching commands or actions found.
+              No matching pages.
             </div>
           ) : (
             <div className="space-y-1">

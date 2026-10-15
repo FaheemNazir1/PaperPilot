@@ -1,54 +1,38 @@
 # PaperPilot
 
-AI-Powered Scientific Literature Review Assistant
+Scientific paper library for literature reviews
 
 ## Overview
 
-PaperPilot is a research assistant designed to help users process multiple scientific papers, understand their content, compare methodologies, identify research gaps, and eventually generate citation-supported literature reviews.
+PaperPilot lets researchers upload scientific papers (PDF) to a private, per-user library and manage them. AI-assisted features (comparison, gap detection, literature review generation, chat) are planned but **not implemented yet**.
 
-## Current Capabilities
+## Available now
 
-- **Scientific PDF Upload**: Multi-file drag-and-drop document upload with format and size validation.
-- **PDF Text Extraction using PyMuPDF**: High-fidelity page-by-page text, typography hierarchy, and block extraction.
-- **Scientific Text Cleaning**: Automated dehyphenation across line breaks, Unicode ligature normalization (`ﬁ` $\rightarrow$ `fi`), running header/footer pruning, and paragraph reconstruction.
-- **Academic Section Detection**: Flexible heuristic classifier identifying canonical scientific sections (*Title*, *Abstract*, *Introduction*, *Methodology*, *Results/Findings*, *Discussion*, *Limitations*, *Conclusion*, *References*).
-- **Dual Text Stream Storage**: Retains untouched raw text (`original_text`) for source verification alongside sanitized text (`cleaned_text`).
-- **Paper Metadata Storage**: Structured entity extraction (methodology summary, reported benchmarks, key findings, dataset and model mentions).
-- **SQLite Persistence**: Relational storage in `paperpilot.db` with WAL mode and cascade-linked section records.
-- **Paper Browsing & Search**: Multi-domain scientific library with full-text search and category filtering.
-- **Research-Paper Comparison UI**: Side-by-side methodology, dataset, and benchmark comparison matrix with difference highlighting.
-- **Literature Review Workspace**: Manuscript reader with interactive citation markers linking to bibliographic source popovers.
-- **Research Gap Visualization**: 2D scientific impact vs. feasibility opportunity map with detailed thesis brief panels.
-- **AI Assistant Interface**: Grounded research copilot with suggested prompts, attribution badges, and verbatim citation drawer.
-- **Responsive Research Workspace**: Desktop collapsible sidebar, mobile drawer, and global `⌘K` command palette.
+- **Google sign-in** (Firebase Authentication) with Bearer ID-token verification in FastAPI.
+- **PDF upload**: multi-file upload with type and size validation (limit set by `PAPERPILOT_MAX_UPLOAD_MB`, default 25). Uploading only stores the file and a database record (filename, owner, upload time, size, page count and embedded PDF title/author when present). Nothing is analyzed at upload; papers are marked *Uploaded — not yet analyzed*.
+- **My Papers**: list, search, view basic metadata, and delete your own uploads. Counts everywhere come from the same per-user data source.
+- **Demo Library**: a small set of example papers, kept strictly separate from your uploads and never counted in My Papers.
+- **Per-user isolation**: ownership is taken from the verified token, never from the request; other users' papers return 404.
 
-> **Note**: Full AI/RAG functionality (vector embeddings, similarity search, LLM-based autonomous synthesis) is currently under active development. Current synthesis, summaries, and chat features use structured research models and simulated intelligence pipelines.
+## Planned (not implemented)
+
+- AI Assistant (chat), currently shown as *Under maintenance*
+- Compare Papers, Research Gaps, Literature Review generation (shown as *Coming soon*)
+- Embeddings, vector indexing and RAG
+
+The backend also contains **PDF text extraction, text cleaning and section detection services** (`backend/services/`, PyMuPDF-based). They are not run during upload; they are kept for future analysis features.
 
 ## Architecture
 
 ```
 React/Vite (Frontend)
-      ↓ HTTP / REST
+      ↓ HTTP / REST, Firebase ID token
    FastAPI (Backend)
       ↓
-  PDF Upload
+ PDF upload → per-user file storage (backend/storage/uploads/<user id>/)
       ↓
-   PyMuPDF (Raw Text Extraction & Typography)
-      ↓
- Text Cleaning (Dehyphenation, Ligatures, Headers/Footers)
-      ↓
-Section Detection (Title, Abstract, Methods, Results, Discussion, Limitations, Conclusion, References)
-      ↓
- SQLite Database (paperpilot.db)
+ SQLite Database (paperpilot.db): users, papers (user_id / is_demo)
 ```
-
-Future versions will incorporate:
-- Dense vector embeddings (Sentence Transformers / SciBERT)
-- Vector indexing (FAISS / ChromaDB)
-- Retrieval-Augmented Generation (RAG)
-- LLM-based multi-paper literature review generation
-- Automated research gap discovery & thesis proposal generation
-- Citation grounding and verification metrics
 
 ## Tech Stack
 
@@ -101,6 +85,12 @@ The application will be accessible at `http://127.0.0.1:5173`.
 ```bash
 npm run build
 ```
+
+### 5. Backend Tests
+```bash
+python -m unittest backend.test_personal_library backend.test_ownership_security -v
+```
+`test_personal_library` runs against a temporary database and upload folder.
 
 ## Project Structure
 

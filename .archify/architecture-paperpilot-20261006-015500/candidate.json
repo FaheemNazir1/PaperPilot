@@ -1,0 +1,514 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "PaperPilot — System Architecture & Workflow",
+    "subtitle": "Mega Project: Automatic Literature Review Generation with User Isolation & Future AI Layer",
+    "output": ".archify/architecture-paperpilot-20261006-015500/paperpilot-architecture.html",
+    "visual_preset": "blueprint",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    {
+      "id": "researcher",
+      "type": "external",
+      "icon": "person",
+      "label": "Academic Researcher",
+      "sublabel": "Browser Client :5173",
+      "pos": [40, 160],
+      "size": [130, 64]
+    },
+    {
+      "id": "google_idp",
+      "type": "security",
+      "icon": "security",
+      "label": "Google OAuth 2.0",
+      "sublabel": "accounts.google.com",
+      "pos": [520, 40],
+      "size": [140, 60]
+    },
+    {
+      "id": "firebase_auth",
+      "type": "cloud",
+      "icon": "cloud",
+      "label": "Firebase Auth",
+      "sublabel": "Issues ID Token (JWT)",
+      "pos": [765, 40],
+      "size": [140, 60]
+    },
+    {
+      "id": "react_frontend",
+      "type": "frontend",
+      "icon": "frontend",
+      "label": "React + Vite Frontend",
+      "sublabel": "UI & Route Pages",
+      "pos": [275, 160],
+      "size": [140, 64]
+    },
+    {
+      "id": "auth_context",
+      "type": "frontend",
+      "icon": "frontend",
+      "label": "Auth Context & State",
+      "sublabel": "Active User Session",
+      "pos": [520, 160],
+      "size": [140, 64]
+    },
+    {
+      "id": "api_client",
+      "type": "frontend",
+      "icon": "frontend",
+      "label": "Axios API Client",
+      "sublabel": "Bearer Token Injected",
+      "pos": [765, 160],
+      "size": [140, 64]
+    },
+    {
+      "id": "auth_guard",
+      "type": "security",
+      "icon": "security",
+      "label": "Firebase Auth Guard",
+      "sublabel": "verify_firebase_token",
+      "pos": [40, 320],
+      "size": [130, 64]
+    },
+    {
+      "id": "fastapi_app",
+      "type": "backend",
+      "icon": "backend",
+      "label": "FastAPI REST Server",
+      "sublabel": "App Entrypoint :8000",
+      "pos": [275, 320],
+      "size": [140, 64]
+    },
+    {
+      "id": "upload_router",
+      "type": "backend",
+      "icon": "backend",
+      "label": "Upload Router",
+      "sublabel": "POST /papers/upload",
+      "pos": [520, 320],
+      "size": [140, 64]
+    },
+    {
+      "id": "ownership_guard",
+      "type": "security",
+      "icon": "security",
+      "label": "Ownership Guard",
+      "sublabel": "user_id Isolation (404)",
+      "pos": [275, 460],
+      "size": [140, 64]
+    },
+    {
+      "id": "user_storage",
+      "type": "backend",
+      "icon": "backend",
+      "label": "Isolated PDF Storage",
+      "sublabel": "uploads/<user_id>/*.pdf",
+      "pos": [765, 460],
+      "size": [140, 64]
+    },
+    {
+      "id": "pdf_extractor",
+      "type": "backend",
+      "icon": "backend",
+      "label": "PyMuPDF Extractor",
+      "sublabel": "Page & Block Parser",
+      "pos": [765, 320],
+      "size": [140, 64]
+    },
+    {
+      "id": "text_cleaner",
+      "type": "backend",
+      "icon": "backend",
+      "label": "Text Cleaning",
+      "sublabel": "Ligatures & Noise",
+      "pos": [1010, 320],
+      "size": [140, 64]
+    },
+    {
+      "id": "section_detector",
+      "type": "backend",
+      "icon": "backend",
+      "label": "Section Detector",
+      "sublabel": "Academic Section Parser",
+      "pos": [1010, 460],
+      "size": [140, 64]
+    },
+    {
+      "id": "users_table",
+      "type": "database",
+      "icon": "database",
+      "label": "users Table",
+      "sublabel": "firebase_uid, email, name",
+      "pos": [40, 600],
+      "size": [130, 64]
+    },
+    {
+      "id": "papers_table",
+      "type": "database",
+      "icon": "database",
+      "label": "papers Table",
+      "sublabel": "user_id FK, is_demo, text",
+      "pos": [275, 600],
+      "size": [140, 64]
+    },
+    {
+      "id": "sections_table",
+      "type": "database",
+      "icon": "database",
+      "label": "paper_sections Table",
+      "sublabel": "paper_id FK, type, text",
+      "pos": [520, 600],
+      "size": [140, 64]
+    },
+    {
+      "id": "demo_papers",
+      "type": "database",
+      "icon": "database",
+      "label": "Benchmark Demo Data",
+      "sublabel": "is_demo = 1 (10 Papers)",
+      "pos": [40, 740],
+      "size": [130, 64]
+    },
+    {
+      "id": "chunking_svc",
+      "type": "backend",
+      "icon": "backend",
+      "label": "Chunking Engine",
+      "sublabel": "Section Aware Chunks",
+      "tag": "Planned",
+      "pos": [520, 740],
+      "size": [140, 64]
+    },
+    {
+      "id": "embedding_engine",
+      "type": "cloud",
+      "icon": "cloud",
+      "label": "Embeddings Engine",
+      "sublabel": "SciBERT / BGE Vectors",
+      "tag": "Planned",
+      "pos": [765, 740],
+      "size": [140, 64]
+    },
+    {
+      "id": "faiss_vector_store",
+      "type": "database",
+      "icon": "database",
+      "label": "FAISS Vector Store",
+      "sublabel": "Semantic Similarity Index",
+      "tag": "Planned",
+      "pos": [1010, 740],
+      "size": [140, 64]
+    },
+    {
+      "id": "rag_orchestrator",
+      "type": "backend",
+      "icon": "backend",
+      "label": "RAG Orchestrator",
+      "sublabel": "Context Retrieval Pipeline",
+      "tag": "Planned",
+      "pos": [1010, 870],
+      "size": [140, 64]
+    },
+    {
+      "id": "gap_comparator",
+      "type": "backend",
+      "icon": "backend",
+      "label": "Research Gap Analyzer",
+      "sublabel": "Cross-Paper Comparison",
+      "tag": "Planned",
+      "pos": [765, 870],
+      "size": [140, 64]
+    },
+    {
+      "id": "llm_review_gen",
+      "type": "cloud",
+      "icon": "cloud",
+      "label": "Literature Review LLM",
+      "sublabel": "Automated Academic Synthesis",
+      "tag": "Planned",
+      "pos": [520, 870],
+      "size": [140, 64]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Cloud Identity Provider",
+      "wraps": ["google_idp", "firebase_auth"],
+      "pad": 14
+    },
+    {
+      "kind": "region",
+      "label": "Frontend Layer (React 19 + TypeScript + Vite)",
+      "wraps": ["react_frontend", "auth_context", "api_client"],
+      "pad": 14
+    },
+    {
+      "kind": "region",
+      "label": "Backend Application Server (FastAPI :8000)",
+      "wraps": ["auth_guard", "fastapi_app", "upload_router", "ownership_guard"],
+      "pad": 14
+    },
+    {
+      "kind": "region",
+      "label": "PDF Processing Pipeline & Storage",
+      "wraps": ["pdf_extractor", "text_cleaner", "user_storage", "section_detector"],
+      "pad": 14
+    },
+    {
+      "kind": "region",
+      "label": "Relational Persistence (SQLite: paperpilot.db)",
+      "wraps": ["users_table", "papers_table", "sections_table", "demo_papers"],
+      "pad": 14
+    },
+    {
+      "kind": "security-group",
+      "label": "Planned / Future AI Layer (Mega Project Synthesis Pipeline)",
+      "wraps": [
+        "chunking_svc",
+        "embedding_engine",
+        "faiss_vector_store",
+        "rag_orchestrator",
+        "gap_comparator",
+        "llm_review_gen"
+      ],
+      "pad": 14
+    }
+  ],
+  "connections": [
+    {
+      "from": "researcher",
+      "to": "react_frontend",
+      "label": "User Interaction",
+      "variant": "emphasis"
+    },
+    {
+      "from": "react_frontend",
+      "to": "google_idp",
+      "label": "Sign-In Popup"
+    },
+    {
+      "from": "google_idp",
+      "to": "firebase_auth",
+      "label": "OAuth Credential",
+      "fromSide": "right",
+      "toSide": "left",
+      "route": "straight"
+    },
+    {
+      "from": "firebase_auth",
+      "to": "auth_context",
+      "label": "ID Token JWT",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "orthogonal-v"
+    },
+    {
+      "from": "auth_context",
+      "to": "api_client",
+      "label": "Provides Token",
+      "fromSide": "right",
+      "toSide": "left",
+      "route": "straight"
+    },
+    {
+      "from": "api_client",
+      "to": "fastapi_app",
+      "label": "Bearer Token",
+      "variant": "security",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "orthogonal-v"
+    },
+    {
+      "from": "fastapi_app",
+      "to": "auth_guard",
+      "label": "Validate JWT",
+      "variant": "security",
+      "fromSide": "left",
+      "toSide": "right",
+      "route": "straight"
+    },
+    {
+      "from": "auth_guard",
+      "to": "users_table",
+      "label": "Upsert User",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "straight"
+    },
+    {
+      "from": "fastapi_app",
+      "to": "ownership_guard",
+      "label": "Guard user_id",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "straight"
+    },
+    {
+      "from": "ownership_guard",
+      "to": "papers_table",
+      "label": "Enforce 404",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "straight"
+    },
+    {
+      "from": "api_client",
+      "to": "upload_router",
+      "label": "POST /upload",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "orthogonal-v"
+    },
+    {
+      "from": "upload_router",
+      "to": "user_storage",
+      "label": "Save PDF File"
+    },
+    {
+      "from": "upload_router",
+      "to": "pdf_extractor",
+      "label": "Extract Stream"
+    },
+    {
+      "from": "pdf_extractor",
+      "to": "text_cleaner",
+      "label": "Raw Text"
+    },
+    {
+      "from": "text_cleaner",
+      "to": "section_detector",
+      "label": "Clean Text"
+    },
+    {
+      "from": "upload_router",
+      "to": "papers_table",
+      "label": "Insert Paper Record",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "via": [[590, 550], [345, 550]]
+    },
+    {
+      "from": "section_detector",
+      "to": "sections_table",
+      "label": "Save Sections"
+    },
+    {
+      "from": "users_table",
+      "to": "papers_table",
+      "label": "Owner FK"
+    },
+    {
+      "from": "demo_papers",
+      "to": "papers_table",
+      "label": "is_demo = 1",
+      "variant": "dashed"
+    },
+    {
+      "from": "papers_table",
+      "to": "sections_table",
+      "label": "1:N Relation",
+      "fromSide": "right",
+      "toSide": "left",
+      "route": "straight"
+    },
+    {
+      "from": "sections_table",
+      "to": "chunking_svc",
+      "label": "Section Text",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "straight"
+    },
+    {
+      "from": "chunking_svc",
+      "to": "embedding_engine",
+      "label": "Text Chunks",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "left",
+      "route": "straight"
+    },
+    {
+      "from": "embedding_engine",
+      "to": "faiss_vector_store",
+      "label": "Vectors",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "left",
+      "route": "straight"
+    },
+    {
+      "from": "faiss_vector_store",
+      "to": "rag_orchestrator",
+      "label": "Top-K Matches",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "straight"
+    },
+    {
+      "from": "rag_orchestrator",
+      "to": "gap_comparator",
+      "label": "Cross Synthesize",
+      "variant": "dashed",
+      "fromSide": "left",
+      "toSide": "right",
+      "route": "straight"
+    },
+    {
+      "from": "gap_comparator",
+      "to": "llm_review_gen",
+      "label": "Generate Review",
+      "variant": "dashed",
+      "fromSide": "left",
+      "toSide": "right",
+      "route": "straight"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Client & Auth Flow",
+      "items": [
+        "Google Sign-In authenticated via Firebase Web SDK",
+        "Bearer ID Token automatically attached to API requests",
+        "Zero fallback leakage: new user sees empty library"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Multi-Tenant Backend & Isolation",
+      "items": [
+        "FastAPI cryptographically verifies Firebase ID tokens",
+        "Application users table links Google UID to internal user_id",
+        "Paper ownership enforced: 404 returned on cross-tenant access",
+        "Canonical benchmark papers isolated via is_demo flag"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "PDF Pipeline & Relational Schema",
+      "items": [
+        "PyMuPDF extracts raw text & layout blocks",
+        "Text cleaner handles ligatures, dehyphenation & noise",
+        "Heuristic detector extracts academic sections",
+        "Users -> Papers -> Paper Sections relational hierarchy"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Planned Future AI Layer (Mega Project)",
+      "items": [
+        "Semantic chunking across structured sections",
+        "Dense vector embeddings stored in FAISS",
+        "Multi-paper RAG retrieval with gap detection",
+        "LLM-driven academic literature review generation"
+      ]
+    }
+  ]
+}

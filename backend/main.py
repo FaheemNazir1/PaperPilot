@@ -2,7 +2,11 @@ import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from backend.db.database import get_all_papers, get_db_connection, init_db, seed_default_papers
+from typing import Any, Dict, Optional
+from fastapi import Depends
+from backend.auth.firebase_auth import get_optional_current_user
+from backend.db.database import get_db_connection, get_user_stats, init_db, seed_default_papers
+from backend.routers.auth import router as auth_router
 from backend.routers.papers import router as papers_router
 
 
@@ -16,7 +20,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="PaperPilot API",
-    description="AI-Powered Scientific Literature Review Assistant Backend",
+    description="Backend for PaperPilot: authenticated scientific paper upload and library management",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -31,6 +35,7 @@ app.add_middleware(
 )
 
 # Register routers
+app.include_router(auth_router, prefix="/api/v1")
 app.include_router(papers_router, prefix="/api/v1")
 
 
@@ -44,24 +49,10 @@ def health_check():
 
 
 @app.get("/api/v1/stats")
-def get_stats():
-    """Returns real aggregate stats from the SQLite database."""
-    with get_db_connection() as conn:
-        paper_count = conn.execute("SELECT COUNT(*) FROM papers").fetchone()[0]
-        section_count = conn.execute("SELECT COUNT(*) FROM paper_sections").fetchone()[0]
-        category_rows = conn.execute(
-            "SELECT category, COUNT(*) as count FROM papers GROUP BY category"
-        ).fetchall()
-        categories = {r["category"]: r["count"] for r in category_rows}
-
-    return {
-        "papersAnalyzed": paper_count,
-        "sectionsIndexed": section_count,
-        "literatureReviews": 8,
-        "keyInsights": 47,
-        "researchGaps": 23,
-        "categories": categories,
-    }
+def get_stats(current_user: Optional[Dict[str, Any]] = Depends(get_optional_current_user)):
+    """Returns real aggregate stats from the SQLite database isolated by user."""
+    user_id = current_user["id"] if current_user else None
+    return get_user_stats(user_id=user_id)
 
 
 if __name__ == "__main__":

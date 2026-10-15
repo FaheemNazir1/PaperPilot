@@ -13,9 +13,12 @@ import {
   ChevronLeft,
   Sparkles,
   PanelLeftClose,
-  PanelLeft
+  PanelLeft,
+  LogOut
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useAuth } from '../../contexts/AuthContext';
+import { useLibrary } from '../../contexts/LibraryContext';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -31,15 +34,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onToggleCollapse
 }) => {
   const location = useLocation();
+  const { currentUser, signOut } = useAuth();
+  const { count } = useLibrary();
+
+  const userInitials = currentUser?.displayName
+    ? currentUser.displayName
+        .split(' ')
+        .map((part) => part[0])
+        .join('')
+        .toUpperCase()
+        .slice(0, 2)
+    : (currentUser?.email?.slice(0, 2).toUpperCase() || 'RP');
 
   const navItems = [
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, badge: null },
-    { name: 'My Papers', path: '/papers', icon: FileText, badge: '10' },
+    // Real count of the signed-in user's own papers; hidden until it has loaded.
+    { name: 'My Papers', path: '/papers', icon: FileText, badge: count !== null ? String(count) : null },
     { name: 'Upload Papers', path: '/upload', icon: Upload, badge: null },
-    { name: 'Literature Review', path: '/literature-review', icon: BookOpen, badge: null },
-    { name: 'Compare Papers', path: '/compare', icon: GitCompare, badge: null },
-    { name: 'Research Gaps', path: '/research-gaps', icon: Lightbulb, badge: null },
-    { name: 'AI Assistant', path: '/assistant', icon: Bot, badge: null },
+    { name: 'Literature Review', path: '/literature-review', icon: BookOpen, badge: 'Soon' },
+    { name: 'Compare Papers', path: '/compare', icon: GitCompare, badge: 'Soon' },
+    { name: 'Research Gaps', path: '/research-gaps', icon: Lightbulb, badge: 'Soon' },
+    { name: 'AI Assistant', path: '/assistant', icon: Bot, badge: 'Maintenance' },
   ];
 
   const isActiveRoute = (path: string) => {
@@ -84,7 +99,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   PaperPilot
                 </span>
                 <span className="text-[10px] text-zinc-400 block leading-tight font-sans truncate">
-                  AI Research Copilot
+                  Research Library
                 </span>
               </div>
             )}
@@ -109,7 +124,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex-1 px-2.5 py-3 space-y-1 overflow-y-auto custom-scrollbar">
           {!isCollapsed && (
             <div className="px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-semibold">
-              Research Workspace
+              Workspace
             </div>
           )}
 
@@ -177,31 +192,55 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </NavLink>
         </div>
 
-        {/* User profile & backend status at bottom */}
+        {/* User profile & authenticated account at bottom */}
         <div className="p-2.5 border-t border-zinc-800/80 bg-zinc-950/60">
           <div
             className={cn(
-              'flex items-center p-2 rounded-lg bg-zinc-900/40 border border-zinc-850',
+              'flex items-center p-2 rounded-lg bg-zinc-900/50 border border-zinc-850 transition-colors',
               isCollapsed ? 'justify-center' : 'justify-between'
             )}
+            title={currentUser ? `${currentUser.displayName || 'User'} (${currentUser.email || ''})` : 'Researcher Profile'}
           >
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-semibold text-zinc-200 shrink-0">
-                RP
-              </div>
+              {currentUser?.photoURL ? (
+                <img
+                  src={currentUser.photoURL}
+                  alt={currentUser.displayName || 'Google Profile'}
+                  className="w-7 h-7 rounded-full object-cover border border-zinc-700 shrink-0"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <div className="w-7 h-7 rounded-full bg-accent-600/30 text-accent-300 border border-accent-500/40 flex items-center justify-center text-xs font-semibold shrink-0">
+                  {userInitials}
+                </div>
+              )}
               {!isCollapsed && (
                 <div className="min-w-0">
                   <div className="text-xs font-medium text-zinc-200 truncate">
-                    Researcher
+                    {currentUser?.displayName || 'Researcher'}
                   </div>
-                  <div className="text-[10px] text-zinc-400 truncate flex items-center gap-1">
+                  <div className="text-[10px] text-zinc-400 truncate flex items-center gap-1 font-mono">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse" />
-                    Local Workspace
+                    <span className="truncate">{currentUser?.email || 'Local Workspace'}</span>
                   </div>
                 </div>
               )}
             </div>
-            {!isCollapsed && <ChevronRight className="w-3.5 h-3.5 text-zinc-400 shrink-0" />}
+            {!isCollapsed && (
+              <button
+                onClick={async () => {
+                  try {
+                    await signOut();
+                  } catch (e) {
+                    console.error('Logout error:', e);
+                  }
+                }}
+                className="p-1 rounded text-zinc-500 hover:text-rose-400 hover:bg-zinc-800/60 transition-colors shrink-0"
+                title="Sign out"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
       </aside>
