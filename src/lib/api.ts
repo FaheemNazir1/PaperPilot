@@ -7,7 +7,7 @@
  */
 
 import { auth } from './firebase';
-import { Paper, UploadResult, LibraryStats } from '../types';
+import { Paper, PaperSummary, UploadResult, LibraryStats, ChatReply } from '../types';
 
 const isLocalhost =
   typeof window !== 'undefined' &&
@@ -127,6 +127,41 @@ export const api = {
   async deletePaper(paperId: string): Promise<void> {
     const res = await authFetch(`/papers/${encodeURIComponent(paperId)}`, { method: 'DELETE' });
     if (!res.ok) throw await errorFrom(res, 'Could not delete paper');
+  },
+
+  /** The original uploaded PDF as a Blob. Fetched with the Bearer token, so it is never a public URL. */
+  async getPaperPdf(paperId: string): Promise<Blob> {
+    const res = await authFetch(`/papers/${encodeURIComponent(paperId)}/pdf`);
+    if (res.status === 404) {
+      throw new ApiError('The original PDF is not available. It may have been removed from the server.', 404);
+    }
+    if (!res.ok) throw await errorFrom(res, 'Could not load the PDF');
+    return res.blob();
+  },
+
+  /** Generates a summary of one of the user's own uploaded PDFs. Nothing is stored server-side. */
+  async summarizePaper(paperId: string): Promise<PaperSummary> {
+    const res = await authFetch(`/papers/${encodeURIComponent(paperId)}/summary`, { method: 'POST' });
+    if (!res.ok) throw await errorFrom(res, 'Could not generate a summary');
+    return res.json();
+  },
+
+  /**
+   * Research Mentor. The server applies the research-only gate, searches only the signed-in
+   * user's own papers (optionally limited to paperIds) and returns a grounded, cited answer.
+   */
+  async chat(
+    message: string,
+    paperIds: string[] | undefined,
+    history: { role: 'user' | 'assistant'; content: string }[],
+  ): Promise<ChatReply> {
+    const res = await authFetch('/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, paper_ids: paperIds, history }),
+    });
+    if (!res.ok) throw await errorFrom(res, 'The Research Mentor could not answer');
+    return res.json();
   },
 
   /** Real counts from the database: personal papers vs. demo library. */

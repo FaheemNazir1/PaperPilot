@@ -1,0 +1,12 @@
+# Optional, heavy: only for running ML models on the server itself. NOT needed for the hosted API.
+# Install with: pip install -r backend/requirements-ml.txt
+#
+# - Paper summarizer (fine-tuned T5-small): needs torch/transformers plus the model files in
+#   models/literature_summarizer_final/ or SUMMARIZER_MODEL_PATH.
+# - Local embeddings for the Research Mentor (MiniLM): used automatically when sentence-transformers is
+#   installed. Without it the app uses Gemini embeddings (set EMBEDDING_BACKEND=gemini|local to force one).
+torch>=2.2
+transformers>=4.40
+sentencepiece>=0.2
+safetensors>=0.4
+sentence-transformers>=3.0

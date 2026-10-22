@@ -61,7 +61,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
       path: '/literature-review',
       icon: BookOpen,
       shortcut: 'R',
-      description: 'Not available yet'
+      description: 'Ask questions about your papers'
     },
     {
       id: 'compare-papers',
@@ -74,7 +74,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
     },
     {
       id: 'ask-assistant',
-      label: 'AI Assistant (under maintenance)',
+      label: 'Research Mentor',
       category: 'Research Tools',
       path: '/assistant',
       icon: Bot,

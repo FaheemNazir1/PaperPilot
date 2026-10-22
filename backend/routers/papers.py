@@ -6,9 +6,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse
 
 from backend.auth.firebase_auth import get_current_user, get_optional_current_user
 from backend.db.database import (
+    DATA_DIR,
     delete_paper,
     get_all_papers,
     get_owned_file_path,
@@ -16,13 +18,14 @@ from backend.db.database import (
     get_paper_sections,
     save_paper,
 )
+from backend.services import summarizer
 from backend.services.pdf_extractor import read_basic_metadata
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/papers", tags=["papers"])
 
-STORAGE_DIR = Path(__file__).resolve().parent.parent / "storage" / "uploads"
+STORAGE_DIR = DATA_DIR / "storage" / "uploads"
 STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 # Per-file upload limit, configurable via PAPERPILOT_MAX_UPLOAD_MB (default 25 MB).
@@ -107,6 +110,59 @@ def remove_paper(
         except OSError:
             logger.warning("Could not remove stored file for deleted paper %s", paper_id)
     return {"message": "Paper successfully deleted", "id": paper_id}
+
+
+@router.get("/{paper_id}/pdf")
+def get_paper_pdf(
+    paper_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """
+    Streams the original uploaded PDF to its owner. Requires authentication; other users'
+    papers, demo papers and papers with no stored file all return 404. The stored path is
+    looked up from the database by ownership and never taken from the request.
+    """
+    stored_file = get_owned_file_path(paper_id, current_user["id"])
+    if not stored_file:
+        raise HTTPException(status_code=404, detail="Paper not found")
+    path = Path(stored_file)
+    try:
+        inside_storage = path.resolve().is_relative_to(STORAGE_DIR.resolve())
+    except OSError:
+        inside_storage = False
+    if not inside_storage or not path.is_file():
+        raise HTTPException(status_code=404, detail="The original PDF is no longer available on the server.")
+    return FileResponse(
+        path,
+        media_type="application/pdf",
+        filename=f"{paper_id}.pdf",
+        content_disposition_type="inline",
+        headers={"Cache-Control": "private, no-store"},
+    )
+
+
+@router.post("/{paper_id}/summary")
+def summarize_paper(
+    paper_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """
+    Generates a summary of one of the caller's own uploaded PDFs with the fine-tuned T5-small model.
+    Requires authentication; demo papers and other users' papers return 404. Nothing is stored.
+    Only the first 512 tokens of the paper are read (see inputTokens/totalTokens/truncated).
+    """
+    stored_file = get_owned_file_path(paper_id, current_user["id"])
+    if not stored_file or not Path(stored_file).is_file():
+        raise HTTPException(status_code=404, detail="Paper not found")
+    try:
+        return summarizer.summarize_pdf(stored_file)
+    except summarizer.SummarizerUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except summarizer.UnreadablePdf as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception:
+        logger.exception("Summarization failed for paper %s", paper_id)
+        raise HTTPException(status_code=500, detail="Summary generation failed. Please try again.")
 
 
 def _format_size(num_bytes: int) -> str:
