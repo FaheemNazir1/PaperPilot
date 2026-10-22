@@ -57,10 +57,25 @@ app.include_router(chat_router, prefix="/api/v1")
 
 @app.get("/api/health")
 def health_check():
+    # Public, so it carries only booleans and the embedding backend's name: never keys, model names or paths.
+    from backend.chat import embeddings, llm
+    from backend.services import summarizer
+
     return {
         "status": "online",
         "service": "PaperPilot API",
         "version": "1.0.0",
+        "features": {
+            "researchMentor": {
+                "geminiKeyConfigured": llm.is_configured(),
+                "modelConfigured": bool(os.getenv("GEMINI_MODEL", "").strip()),
+                "fallbackModelConfigured": llm.fallback_model_name() is not None,
+                "embeddingBackend": embeddings.backend_name(),
+            },
+            "summarizer": {"modelInstalled": summarizer.is_configured()},
+            "persistentStorage": bool(os.getenv("PAPERPILOT_DATA_DIR", "").strip()),
+            "corsRestricted": _cors_origins != ["*"],
+        },
     }
 
 

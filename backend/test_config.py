@@ -57,5 +57,29 @@ class TestEnvLoader(unittest.TestCase):
         self.assertTrue(all(p.name == ".env" for p in DEFAULT_ENV_FILES))
 
 
+class TestHealthFeatures(unittest.TestCase):
+    def test_health_reports_feature_flags_without_leaking_secrets(self):
+        from fastapi.testclient import TestClient
+
+        from backend.main import app
+
+        secret = "AIzaSyTESTSECRETTESTSECRETTESTSECRET12345"
+        env = {"GEMINI_API_KEY": secret, "GEMINI_MODEL": "some-private-model-name", "GEMINI_FALLBACK_MODEL": "",
+               "EMBEDDING_BACKEND": "gemini", "PAPERPILOT_DATA_DIR": "", "CORS_ORIGINS": ""}
+        with mock.patch.dict(os.environ, env):
+            body = TestClient(app).get("/api/health").json()
+            raw = TestClient(app).get("/api/health").text
+        mentor = body["features"]["researchMentor"]
+        self.assertEqual(body["status"], "online")
+        self.assertTrue(mentor["geminiKeyConfigured"])
+        self.assertTrue(mentor["modelConfigured"])
+        self.assertFalse(mentor["fallbackModelConfigured"])
+        self.assertEqual(mentor["embeddingBackend"], "gemini")
+        self.assertNotIn(secret, raw)
+        self.assertNotIn("some-private-model-name", raw)
+        with mock.patch.dict(os.environ, {"GEMINI_API_KEY": "", "GOOGLE_API_KEY": ""}):
+            self.assertFalse(TestClient(app).get("/api/health").json()["features"]["researchMentor"]["geminiKeyConfigured"])
+
+
 if __name__ == "__main__":
     unittest.main()
