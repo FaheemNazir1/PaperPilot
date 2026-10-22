@@ -56,22 +56,29 @@ app.include_router(chat_router, prefix="/api/v1")
 
 
 @app.get("/api/health")
-def health_check():
+def health_check(deep: bool = False):
     # Public, so it carries only booleans and the embedding backend's name: never keys, model names or paths.
     from backend.chat import embeddings, llm
     from backend.services import summarizer
+
+    mentor_flags = {
+        "geminiKeyConfigured": llm.is_configured(),
+        "modelConfigured": bool(os.getenv("GEMINI_MODEL", "").strip()),
+        "fallbackModelConfigured": llm.fallback_model_name() is not None,
+        "embeddingBackend": embeddings.backend_name(),
+    }
+    if deep and llm.is_configured():
+        # One tiny real generation + embedding, cached for 10 minutes; reports only pass/fail and a failure kind.
+        from backend.chat import selfcheck
+
+        mentor_flags["selfCheck"] = selfcheck.run()
 
     return {
         "status": "online",
         "service": "PaperPilot API",
         "version": "1.0.0",
         "features": {
-            "researchMentor": {
-                "geminiKeyConfigured": llm.is_configured(),
-                "modelConfigured": bool(os.getenv("GEMINI_MODEL", "").strip()),
-                "fallbackModelConfigured": llm.fallback_model_name() is not None,
-                "embeddingBackend": embeddings.backend_name(),
-            },
+            "researchMentor": mentor_flags,
             "summarizer": {"modelInstalled": summarizer.is_configured()},
             "persistentStorage": bool(os.getenv("PAPERPILOT_DATA_DIR", "").strip()),
             "corsRestricted": _cors_origins != ["*"],

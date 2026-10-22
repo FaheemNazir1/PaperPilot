@@ -44,6 +44,7 @@ class FakeGoogle:
         self.embed_requests = []  # one entry per HTTP request: list of per-text request dicts
         self.generate_requests = []
         self.embed_error = None
+        self.generate_error = None
         self.short_embeddings = False
         outer = self
 
@@ -59,6 +60,8 @@ class FakeGoogle:
                     texts = [r["content"]["parts"][0]["text"] for r in reqs_out]
                     return self._send(200, {"embeddings": [{"values": fake_vector(t)} for t in texts]})
                 outer.generate_requests.append(body)
+                if outer.generate_error:
+                    return self._send(*outer.generate_error)
                 return self._send(
                     200,
                     {"candidates": [{"content": {"role": "model", "parts": [{"text": "The authors used Adam [1]."}]}, "finishReason": "STOP"}]},
@@ -248,6 +251,55 @@ class TestChatOnGeminiEmbeddings(GeminiBackendCase):
             res = self.ask("What optimizer did the authors use in the experiments?")
         self.assertEqual(res.status_code, 429)
         self.assertIn("quota", res.json()["detail"].lower())
+
+
+class TestHealthSelfCheck(GeminiBackendCase):
+    def setUp(self):
+        super().setUp()
+        from backend.chat import selfcheck
+
+        self.selfcheck = selfcheck
+        selfcheck.reset()
+        self.client = TestClient(app)
+
+    def tearDown(self):
+        self.selfcheck.reset()
+        super().tearDown()
+
+    def test_plain_health_makes_no_provider_calls(self):
+        body = self.client.get("/api/health").json()
+        self.assertNotIn("selfCheck", body["features"]["researchMentor"])
+        self.assertEqual((self.fake.generate_requests, self.fake.embed_requests), ([], []))
+
+    def test_deep_health_reports_a_working_setup(self):
+        body = self.client.get("/api/health?deep=true").json()
+        check = body["features"]["researchMentor"]["selfCheck"]
+        self.assertEqual(check["generation"], {"ok": True, "kind": "ok"})
+        self.assertEqual(check["embeddings"], {"ok": True, "kind": "ok"})
+        self.assertEqual(len(self.fake.generate_requests), 1)
+
+    def test_deep_health_names_the_failure_kind_but_nothing_sensitive(self):
+        self.fake.generate_error = (404, {"error": {"code": 404, "message": "models/gemini-test-model is not found", "status": "NOT_FOUND"}})
+        with self.assertLogs("backend.chat.llm", "ERROR"):
+            res = self.client.get("/api/health?deep=true")
+        check = res.json()["features"]["researchMentor"]["selfCheck"]
+        self.assertEqual(check["generation"], {"ok": False, "kind": "model_unavailable"})
+        self.assertTrue(check["embeddings"]["ok"])
+        for secret in (KEY, "gemini-test-model", "is not found"):
+            self.assertNotIn(secret, res.text)
+
+    def test_result_is_cached_so_the_public_endpoint_cannot_burn_quota(self):
+        for _ in range(5):
+            self.client.get("/api/health?deep=true")
+        self.assertEqual(len(self.fake.generate_requests), 1)
+        embed_calls = sum(len(r) for r in self.fake.embed_requests)
+        self.assertEqual(embed_calls, 1)
+
+    def test_no_key_means_no_self_check(self):
+        with mock.patch.dict(os.environ, {"GEMINI_API_KEY": "", "GOOGLE_API_KEY": ""}):
+            body = self.client.get("/api/health?deep=true").json()
+        self.assertNotIn("selfCheck", body["features"]["researchMentor"])
+        self.assertFalse(body["features"]["researchMentor"]["geminiKeyConfigured"])
 
 
 if __name__ == "__main__":
