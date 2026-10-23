@@ -58,7 +58,9 @@ def classify_heading(heading_text: str) -> Optional[str]:
     cleaned = re.sub(r"^[#\*\-•\s]+", "", cleaned).strip()
     
     # Separate glued numbering, e.g. "1Introduction" -> "1 Introduction"
-    cleaned = re.sub(r"^(\d+|[IVXLCDM]+)([A-Za-z])", r"\1 \2", cleaned)
+    # Digits only: splitting a leading Roman-numeral-looking capital would break plain
+    # headings such as "Methodology", "Introduction" or "Limitations" ("M ethodology").
+    cleaned = re.sub(r"^(\d+)([A-Za-z])", r"\1 \2", cleaned)
 
     # Check length: headings are generally under 12 words and under 90 characters
     words = cleaned.split()

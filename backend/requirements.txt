@@ -11,3 +11,6 @@ torch>=2.2.0
 transformers>=4.40.0
 peft>=0.10.0
 accelerate>=0.29.0
+# Research Mentor on a small host (no torch): Gemini for answers and, by default, for embeddings.
+google-genai>=1.0
+numpy>=1.26

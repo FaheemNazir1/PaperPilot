@@ -6,7 +6,11 @@ from typing import Any, Dict, List, Optional
 
 from datetime import datetime, timezone
 
-DB_PATH = Path(__file__).resolve().parent.parent / "paperpilot.db"
+# Where data lives. Set PAPERPILOT_DATA_DIR to a persistent disk path in production (for example a
+# Render disk mounted at /var/data); without it the data sits beside the code and is lost whenever an
+# ephemeral host redeploys or restarts.
+DATA_DIR = Path(os.getenv("PAPERPILOT_DATA_DIR", "").strip() or Path(__file__).resolve().parent.parent)
+DB_PATH = DATA_DIR / "paperpilot.db"
 
 
 def get_db_connection() -> sqlite3.Connection:
@@ -87,6 +91,29 @@ def init_db() -> None:
 
             CREATE INDEX IF NOT EXISTS idx_sections_paper_id ON paper_sections(paper_id);
             CREATE INDEX IF NOT EXISTS idx_sections_type ON paper_sections(section_type);
+
+            -- Research Mentor retrieval index: page-aware chunks with embeddings, per paper.
+            CREATE TABLE IF NOT EXISTS paper_chunks (
+                id TEXT PRIMARY KEY,
+                paper_id TEXT NOT NULL,
+                chunk_index INTEGER NOT NULL,
+                section TEXT NOT NULL,
+                page_start INTEGER NOT NULL,
+                page_end INTEGER NOT NULL,
+                text TEXT NOT NULL,
+                embedding BLOB NOT NULL,
+                FOREIGN KEY (paper_id) REFERENCES papers(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_chunks_paper_id ON paper_chunks(paper_id);
+
+            CREATE TABLE IF NOT EXISTS paper_index (
+                paper_id TEXT PRIMARY KEY,
+                signature TEXT NOT NULL,
+                status TEXT NOT NULL,
+                chunk_count INTEGER NOT NULL DEFAULT 0,
+                detail TEXT,
+                FOREIGN KEY (paper_id) REFERENCES papers(id) ON DELETE CASCADE
+            );
         """
         )
         _add_missing_paper_columns(conn)

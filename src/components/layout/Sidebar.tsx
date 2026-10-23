@@ -54,7 +54,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { name: 'Literature Review', path: '/literature-review', icon: BookOpen, badge: 'Soon' },
     { name: 'Compare Papers', path: '/compare', icon: GitCompare, badge: 'Soon' },
     { name: 'Research Gaps', path: '/research-gaps', icon: Lightbulb, badge: 'Soon' },
-    { name: 'AI Assistant', path: '/assistant', icon: Bot, badge: 'Maintenance' },
+    { name: 'Research Mentor', path: '/assistant', icon: Bot, badge: 'Beta' },
   ];
 
   const isActiveRoute = (path: string) => {

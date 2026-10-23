@@ -32,6 +32,51 @@ export interface Paper {
   uploadedAt?: string | null;
 }
 
+export interface PaperSummary {
+  summary: string;
+  model: string;
+  /** Tokens the model actually read (max 512). */
+  inputTokens: number;
+  /** Tokens in the text extracted from the PDF. */
+  totalTokens: number;
+  /** True when the model read only the start of the extracted text. */
+  truncated: boolean;
+}
+
+export interface ChatCitation {
+  /** The [n] marker used in the answer text. */
+  ref: number;
+  paperId: string;
+  paperTitle: string;
+  section: string;
+  pageStart: number;
+  pageEnd: number;
+  chunkId: string;
+  excerpt: string;
+}
+
+export type ChatStatus = 'answered' | 'refused' | 'clarify' | 'no_papers' | 'insufficient_evidence';
+
+export interface ChatReply {
+  category: string;
+  status: ChatStatus;
+  answer: string;
+  citations: ChatCitation[];
+  evidence: {
+    papersSearched: { id: string; title: string }[];
+    papersUnavailable: { id: string; title: string; reason: string }[];
+    paperSetTruncated?: boolean;
+  };
+  model: string | null;
+}
+
+export interface MentorMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  reply?: ChatReply;
+}
+
 export interface PaperSection {
   id: string;
   paper_id: string;

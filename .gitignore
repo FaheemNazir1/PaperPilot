@@ -93,3 +93,7 @@ Thumbs.db
 *.sw?
 
 .vercel
+
+# ML artifacts (large weights; keep out of Git)
+models/*.zip
+models/literature_summarizer_final/
