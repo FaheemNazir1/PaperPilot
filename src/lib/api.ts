@@ -7,6 +7,7 @@
  */
 
 import { auth } from './firebase';
+import { Paper, UploadResult, LibraryStats, AnalyzeResult, GenerateReviewResponse, ModelStatus } from '../types';
 import { Paper, PaperSummary, UploadResult, LibraryStats, ChatReply } from '../types';
 
 const isLocalhost =
@@ -168,6 +169,50 @@ export const api = {
   async getLibraryStats(): Promise<LibraryStats> {
     const res = await authFetch('/stats');
     if (!res.ok) throw await errorFrom(res, 'Could not load library stats');
+    return res.json();
+  },
+
+  /** Runs text extraction on a stored PDF and returns the extracted abstract. */
+  async analyzePaper(paperId: string): Promise<AnalyzeResult> {
+    const res = await authFetch(`/papers/${encodeURIComponent(paperId)}/analyze`, { method: 'POST' });
+    if (!res.ok) throw await errorFrom(res, 'Could not analyze paper');
+    return res.json();
+  },
+
+  /** Lets the user correct the extracted abstract. */
+  async updateAbstract(paperId: string, abstract: string): Promise<{ paper_id: string; abstract: string }> {
+    const res = await authFetch(`/papers/${encodeURIComponent(paperId)}/abstract`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ abstract }),
+    });
+    if (!res.ok) throw await errorFrom(res, 'Could not update abstract');
+    return res.json();
+  },
+
+  /** Generates a related-work section from paper IDs already in the library. */
+  async generateReview(
+    queryPaperId: string,
+    referencePaperIds: string[],
+    maxNewTokens = 512,
+  ): Promise<GenerateReviewResponse> {
+    const res = await authFetch('/review/related-work', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query_paper_id: queryPaperId,
+        reference_paper_ids: referencePaperIds,
+        max_new_tokens: maxNewTokens,
+      }),
+    });
+    if (!res.ok) throw await errorFrom(res, 'Could not generate review');
+    return res.json();
+  },
+
+  /** Checks whether the LoRA adapter is present and ready. */
+  async getModelStatus(): Promise<ModelStatus> {
+    const res = await authFetch('/review/status');
+    if (!res.ok) throw await errorFrom(res, 'Could not fetch model status');
     return res.json();
   },
 };

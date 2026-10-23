@@ -55,6 +55,14 @@ wheels/
 *.sqlite3
 paperpilot.db*
 
+# LoRA adapter backups and staging directories (keep only live adapter)
+backend/models/paperpilot_lora_v1_backup/
+backend/models/paperpilot_lora_v3/
+
+# Temporary diagnostic scripts
+backend/_diag.py
+backend/_trace_test.py
+
 # Uploaded documents & temporary research files
 backend/storage/uploads/*
 !backend/storage/uploads/.gitkeep

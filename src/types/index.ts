@@ -184,3 +184,40 @@ export interface LibraryStats {
   personalPapers: number;
   demoPapers: number;
 }
+
+export interface AnalyzeResult {
+  paper_id: string;
+  title: string;
+  abstract: string;
+  status: string;
+}
+
+export interface OutputQualityFlags {
+  repeated_phrases: boolean;
+  citation_spam: boolean;
+  unsupported_citations: boolean;
+  truncated: boolean;
+  warnings: string[];
+}
+
+export interface GenerateReviewResponse {
+  related_work: string;
+  model: string;
+  tokens_requested: number;
+  quality: OutputQualityFlags;
+  disclaimer: string;
+  /** Maps citation index ("1","2"…) to {paper_id, title} for citations grounded to real papers. */
+  citation_map: Record<string, { paper_id: string; title?: string }>;
+  /** Metadata about the grounding pass applied to raw model output. */
+  grounding: {
+    removed_sentence_count: number;
+    pov_fixes_applied: boolean;
+    insufficient_evidence: boolean;
+  };
+}
+
+export interface ModelStatus {
+  model_available: boolean;
+  adapter_path: string;
+  load_error: string | null;
+}
