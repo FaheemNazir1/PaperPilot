@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from pydantic import BaseModel
 
 from backend.auth.firebase_auth import get_current_user, get_optional_current_user
 from backend.db.database import (
@@ -15,8 +16,11 @@ from backend.db.database import (
     get_paper,
     get_paper_sections,
     save_paper,
+    _fetch_sections_by_paper_id,
 )
-from backend.services.pdf_extractor import read_basic_metadata
+from backend.services.pdf_extractor import extract_pdf_content, read_basic_metadata
+from backend.services.text_cleaner import clean_text_pipeline
+from backend.services.section_detector import detect_title_and_authors, extract_key_elements, segment_sections
 
 logger = logging.getLogger(__name__)
 
@@ -240,3 +244,140 @@ async def upload_pdf_papers(
         "items": uploaded_items,
         "papers": saved_papers,
     }
+
+
+# ---------------------------------------------------------------------------
+# Text extraction / analysis endpoint
+# ---------------------------------------------------------------------------
+
+class AnalyzeResult(BaseModel):
+    paper_id: str
+    title: str
+    abstract: str
+    status: str
+
+
+@router.post("/{paper_id}/analyze", response_model=AnalyzeResult)
+def analyze_paper(
+    paper_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """
+    Runs PyMuPDF text extraction, cleaning, section detection, and abstract
+    extraction on a stored PDF.  Updates the paper record in SQLite.
+
+    Only works on PDFs owned by the authenticated user (not demo papers).
+    Returns the extracted abstract so the frontend can let the user edit it.
+
+    Raises:
+        404  – paper not found or not owned by the caller
+        422  – PDF file missing from disk
+        500  – extraction failed (scanned/image-only PDF, corrupt file, etc.)
+    """
+    user_id = current_user["id"]
+    paper = get_paper(paper_id, user_id=user_id)
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper not found")
+
+    file_path = get_owned_file_path(paper_id, user_id)
+    if not file_path or not Path(file_path).exists():
+        raise HTTPException(
+            status_code=422,
+            detail="PDF file not found on disk. The paper record exists but the file is missing.",
+        )
+
+    # ----- extraction -----
+    try:
+        extracted = extract_pdf_content(file_path)
+    except Exception as exc:
+        logger.exception("PDF extraction failed for paper %s", paper_id)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not extract text from this PDF: {exc}. "
+                   "It may be scanned, image-only, or corrupt.",
+        )
+
+    original_text: str = extracted["original_text"]
+    pages = extracted["pages"]
+    blocks = extracted["blocks"]
+    meta_title: str = extracted["meta_title"]
+
+    # Check for image-only / scanned PDFs (no extractable text)
+    total_chars = sum(len(p.get("raw_text", "")) for p in pages)
+    if total_chars < 100:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "This PDF appears to be scanned or image-only (fewer than 100 characters of "
+                "extractable text). PaperPilot cannot process scanned documents."
+            ),
+        )
+
+    cleaned_text = clean_text_pipeline(original_text, pages)
+
+    # Title / author refinement
+    detected_title, detected_authors = detect_title_and_authors(blocks, meta_title=meta_title)
+    best_title = detected_title if len(detected_title) > 4 else paper.get("title", "Untitled")
+
+    sections = segment_sections(cleaned_text, blocks, paper_id)
+    key_elements = extract_key_elements(sections, cleaned_text)
+
+    abstract = key_elements.get("abstract", "").strip()
+    if not abstract or len(abstract) < 40:
+        # fallback: first substantive paragraph
+        paras = [p.strip() for p in cleaned_text.split("\n\n") if len(p.strip()) > 80]
+        abstract = paras[0][:1500] if paras else "Abstract could not be extracted."
+
+    # Persist enriched data
+    updated_data = {
+        **paper,
+        "title": best_title,
+        "authors": detected_authors or paper.get("authors", []),
+        "abstract": abstract,
+        "summary": abstract[:300],
+        "methodology": key_elements.get("methodology", ""),
+        "keyFindings": key_elements.get("keyFindings", []),
+        "limitations": key_elements.get("limitations", []),
+        "dataset": key_elements.get("dataset", "N/A"),
+        "model": key_elements.get("model", "N/A"),
+        "status": "Indexed",
+        "original_text": original_text,
+        "cleaned_text": cleaned_text,
+        "file_path": file_path,
+    }
+
+    save_paper(updated_data, sections, user_id=user_id, is_demo=False)
+
+    return AnalyzeResult(
+        paper_id=paper_id,
+        title=best_title,
+        abstract=abstract,
+        status="Indexed",
+    )
+
+
+@router.patch("/{paper_id}/abstract")
+def update_abstract(
+    paper_id: str,
+    body: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    """
+    Lets the user correct the extracted abstract before generating a review.
+    Only updates the abstract field; all other paper data is untouched.
+    """
+    user_id = current_user["id"]
+    paper = get_paper(paper_id, user_id=user_id)
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper not found")
+
+    new_abstract = (body.get("abstract") or "").strip()
+    if len(new_abstract) < 30:
+        raise HTTPException(status_code=422, detail="Abstract must be at least 30 characters.")
+    if len(new_abstract) > 4000:
+        raise HTTPException(status_code=422, detail="Abstract must not exceed 4000 characters.")
+
+    paper["abstract"] = new_abstract
+    existing_sections = _fetch_sections_by_paper_id(paper_id)
+    save_paper(paper, existing_sections, user_id=user_id, is_demo=False)
+    return {"paper_id": paper_id, "abstract": new_abstract}

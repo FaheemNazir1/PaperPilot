@@ -8,6 +8,7 @@ from backend.auth.firebase_auth import get_optional_current_user
 from backend.db.database import get_db_connection, get_user_stats, init_db, seed_default_papers
 from backend.routers.auth import router as auth_router
 from backend.routers.papers import router as papers_router
+from backend.routers.review import router as review_router
 
 
 @asynccontextmanager
@@ -37,6 +38,7 @@ app.add_middleware(
 # Register routers
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(papers_router, prefix="/api/v1")
+app.include_router(review_router, prefix="/api/v1")
 
 
 @app.get("/api/health")

@@ -6,3 +6,8 @@ pymupdf>=1.24
 firebase-admin>=6.5
 google-auth>=2.29
 requests>=2.31
+# LLM inference — required for the /api/v1/review/related-work endpoint
+torch>=2.2.0
+transformers>=4.40.0
+peft>=0.10.0
+accelerate>=0.29.0
